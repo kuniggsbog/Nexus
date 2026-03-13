@@ -107,9 +107,37 @@ def get_avatar_html(player_name: str, size: int = 56) -> str:
 # ── CSS ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-[data-testid="stAppViewContainer"] { background: #0E1117; }
-[data-testid="stSidebar"] { background: #12151E; border-right: 1px solid #2A2D3A; }
+/* ── Main area: white background, dark text ── */
+[data-testid="stAppViewContainer"] > .main { background: #FFFFFF; }
+[data-testid="stAppViewContainer"] { background: #FFFFFF; }
 
+/* ── Sidebar: always dark regardless of theme ── */
+[data-testid="stSidebar"] {
+    background: #12151E !important;
+    border-right: 1px solid #2A2D3A;
+}
+[data-testid="stSidebar"] * { color: #E8E8E8 !important; }
+[data-testid="stSidebar"] .stRadio label { color: #E8E8E8 !important; }
+[data-testid="stSidebar"] .stSelectbox label,
+[data-testid="stSidebar"] .stSelectbox div[data-baseweb] { color: #E8E8E8 !important; }
+[data-testid="stSidebar"] [data-baseweb="select"] > div {
+    background: #1A1D27 !important;
+    border-color: #2A2D3A !important;
+    color: #E8E8E8 !important;
+}
+[data-testid="stSidebar"] hr { border-color: #2A2D3A !important; }
+
+/* ── Section titles readable on white ── */
+.section-title {
+    color:#4A90D9; font-size:1.05rem; font-weight:700;
+    border-left:3px solid #4A90D9; padding-left:10px; margin:18px 0 10px;
+}
+.former-section-header {
+    color:#E74C3C; font-size:1rem; font-weight:700; margin:28px 0 10px;
+    border-left:3px solid #E74C3C; padding-left:10px;
+}
+
+/* ── Cards stay dark ── */
 .metric-card {
     background: #1A1D27; border: 1px solid #2A2D3A;
     border-radius: 12px; padding: 18px 22px; margin-bottom: 12px;
@@ -146,15 +174,6 @@ st.markdown("""
 .profile-name        { color:#E8E8E8; font-size:1.6rem; font-weight:800; margin:0; }
 .profile-name-former { color:#8A8D9A; font-size:1.6rem; font-weight:800; margin:0; }
 
-.section-title {
-    color:#4A90D9; font-size:1.05rem; font-weight:700;
-    border-left:3px solid #4A90D9; padding-left:10px; margin:18px 0 10px;
-}
-.former-section-header {
-    color:#E74C3C; font-size:1rem; font-weight:700; margin:28px 0 10px;
-    border-left:3px solid #E74C3C; padding-left:10px;
-}
-
 .pill-new       { background:#1A3A1A; color:#2ECC71; padding:2px 10px; border-radius:20px; font-size:0.75rem; }
 .pill-returning { background:#3A2A1A; color:#F39C12; padding:2px 10px; border-radius:20px; font-size:0.75rem; }
 .pill-missing   { background:#3A1A1A; color:#E74C3C;  padding:2px 10px; border-radius:20px; font-size:0.75rem; }
@@ -184,14 +203,18 @@ with st.sidebar:
     st.markdown(
         f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">'
         f'{"<img src=data:image/png;base64," + flag_b64 + " width=28 height=28>" if flag_b64 else "🏴"}'
-        f'<span style="font-size:1.2rem;font-weight:800;color:#E8E8E8;">Guild Tracker</span>'
+        f'<span style="font-size:1.2rem;font-weight:800;color:#E8E8E8;">NEXUS</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
     st.markdown("---")
+    _nav_default = ["🏴 Dashboard", "⚔️ GBG", "🌀 QI", "👤 Player Profiles", "📥 Data Import"]
+    _nav_target  = st.session_state.pop("nav_page", None)
+    _nav_index   = _nav_default.index(_nav_target) if _nav_target in _nav_default else 0
     page = st.radio(
         "Navigate",
-        ["🏴 Dashboard", "⚔️ GBG", "🌀 QI", "👤 Player Profiles", "📥 Data Import"],
+        _nav_default,
+        index=_nav_index,
         label_visibility="collapsed",
         format_func=lambda x: x,
     )
@@ -241,7 +264,8 @@ with st.sidebar:
         _jump = st.selectbox("Player", _player_names, label_visibility="collapsed", key="sidebar_jump")
         if _jump != "—":
             st.session_state["profile_jump"] = _jump
-            st.session_state["force_profiles"] = True
+            st.session_state["nav_page"] = "👤 Player Profiles"
+            st.rerun()
 
 
 # ── Patch radio labels to include icons ───────────────────────────────────
@@ -798,6 +822,10 @@ elif page == "⚔️ GBG":
     if gbg_df.empty:
         st.info("No GBG data yet. Import a season in **📥 Data Import**.")
     else:
+        # Filter to current players only
+        _current_pids_gbg = set(gbg_df[gbg_df["season"] == sort_seasons(gbg_df["season"].unique().tolist())[-1]]["Player_ID"].astype(str))
+        gbg_df_curr = gbg_df[gbg_df["Player_ID"].astype(str).isin(_current_pids_gbg)]
+
         seasons_list = sort_seasons(get_all_seasons()["gbg"], descending=True)
         tab_lb, tab_charts, tab_comp, tab_cumu = st.tabs(
             ["🏅 Leaderboard", "📊 Charts", "📈 Season Comparison", "📦 Cumulative"]
@@ -810,7 +838,7 @@ elif page == "⚔️ GBG":
             with col_sort:
                 sort_col = st.selectbox("Sort by", ["Total", "Fights", "Negotiations"], key="gbg_sort")
             season_arg = None if sel_season == "Latest" else sel_season
-            lb = hide_pid(gbg_leaderboard(gbg_df, season=season_arg, sort_by=sort_col))
+            lb = hide_pid(gbg_leaderboard(gbg_df_curr, season=season_arg, sort_by=sort_col))
             if not lb.empty:
                 st.dataframe(lb, use_container_width=True)
 
@@ -818,12 +846,12 @@ elif page == "⚔️ GBG":
             chart_season = st.selectbox("Season for charts", ["Latest"] + seasons_list, key="gbg_chart_season")
             ca = None if chart_season == "Latest" else chart_season
             top_n = st.slider("Show top N players", 5, 40, 20, key="gbg_topn")
-            st.plotly_chart(gbg_fights_leaderboard(gbg_df, season=ca, top_n=top_n), use_container_width=True)
-            st.plotly_chart(gbg_total_contribution_chart(gbg_df, season=ca, top_n=top_n), use_container_width=True)
-            st.plotly_chart(gbg_guild_trend(gbg_totals(gbg_df)), use_container_width=True)
+            st.plotly_chart(gbg_fights_leaderboard(gbg_df_curr, season=ca, top_n=top_n), use_container_width=True)
+            st.plotly_chart(gbg_total_contribution_chart(gbg_df_curr, season=ca, top_n=top_n), use_container_width=True)
+            st.plotly_chart(gbg_guild_trend(gbg_totals(gbg_df_curr)), use_container_width=True)
 
         with tab_comp:
-            comp = gbg_season_comparison(gbg_df)
+            comp = gbg_season_comparison(gbg_df_curr)
             if comp.empty:
                 st.info("Need at least 2 seasons for comparison.")
             else:
@@ -843,8 +871,8 @@ elif page == "⚔️ GBG":
                 )
 
         with tab_cumu:
-            st.subheader("📦 Cumulative Fights (All Seasons)")
-            cumu = hide_pid(get_cumulative_fights(gbg_df))
+            st.subheader("📦 Cumulative Fights (Current Players)")
+            cumu = hide_pid(get_cumulative_fights(gbg_df_curr))
             if not cumu.empty:
                 st.dataframe(cumu.reset_index(drop=True), use_container_width=True, hide_index=True)
 
@@ -858,6 +886,10 @@ elif page == "🌀 QI":
     if qi_df.empty:
         st.info("No QI data yet. Import a season in **📥 Data Import**.")
     else:
+        # Filter to current players only
+        _current_pids_qi = set(qi_df[qi_df["season"] == sort_seasons(qi_df["season"].unique().tolist())[-1]]["Player_ID"].astype(str))
+        qi_df_curr = qi_df[qi_df["Player_ID"].astype(str).isin(_current_pids_qi)]
+
         qi_seasons_list = sort_seasons(get_all_seasons()["qi"], descending=True)
         tab_lb, tab_charts, tab_comp, tab_cumu = st.tabs(
             ["🏅 Leaderboard", "📊 Charts", "📈 Season Comparison", "📦 Cumulative"]
@@ -870,7 +902,7 @@ elif page == "🌀 QI":
             with col_sort:
                 qi_sort = st.selectbox("Sort by", ["Progress", "Actions"], key="qi_sort")
             qi_season_arg = None if qi_sel == "Latest" else qi_sel
-            qi_lb = hide_pid(qi_leaderboard(qi_df, season=qi_season_arg, sort_by=qi_sort))
+            qi_lb = hide_pid(qi_leaderboard(qi_df_curr, season=qi_season_arg, sort_by=qi_sort))
             if not qi_lb.empty:
                 st.dataframe(qi_lb, use_container_width=True)
 
@@ -878,11 +910,11 @@ elif page == "🌀 QI":
             qi_chart_s = st.selectbox("Season for charts", ["Latest"] + qi_seasons_list, key="qi_chart_season")
             qi_ca = None if qi_chart_s == "Latest" else qi_chart_s
             qi_top_n = st.slider("Show top N players", 5, 40, 20, key="qi_topn")
-            st.plotly_chart(qi_progress_leaderboard(qi_df, season=qi_ca, top_n=qi_top_n), use_container_width=True)
-            st.plotly_chart(qi_guild_trend(qi_totals(qi_df)), use_container_width=True)
+            st.plotly_chart(qi_progress_leaderboard(qi_df_curr, season=qi_ca, top_n=qi_top_n), use_container_width=True)
+            st.plotly_chart(qi_guild_trend(qi_totals(qi_df_curr)), use_container_width=True)
 
         with tab_comp:
-            qi_comp = qi_season_comparison(qi_df)
+            qi_comp = qi_season_comparison(qi_df_curr)
             if qi_comp.empty:
                 st.info("Need at least 2 seasons for comparison.")
             else:
@@ -902,8 +934,8 @@ elif page == "🌀 QI":
                 )
 
         with tab_cumu:
-            st.subheader("📦 Cumulative Progress (All Seasons)")
-            qi_cumu = hide_pid(get_cumulative_progress(qi_df))
+            st.subheader("📦 Cumulative Progress (Current Players)")
+            qi_cumu = hide_pid(get_cumulative_progress(qi_df_curr))
             if not qi_cumu.empty:
                 st.dataframe(qi_cumu.reset_index(drop=True), use_container_width=True, hide_index=True)
 

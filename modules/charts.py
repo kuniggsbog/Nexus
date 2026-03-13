@@ -272,8 +272,8 @@ def points_trend_chart(members_df: pd.DataFrame) -> go.Figure:
         **LAYOUT_BASE,
         title=dict(text="📈 Guild Total Points Over Time", font=dict(size=16)),
         height=360,
-        yaxis=dict(tickformat=".2s", gridcolor="#2A2D3A"),
     )
+    fig.update_yaxes(tickformat=".2s")
     return fig
 
 
