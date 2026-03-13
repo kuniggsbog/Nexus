@@ -28,7 +28,11 @@ from modules.qi_analysis import (
     get_top_contributors as qi_top,
     get_cumulative_progress,
 )
-from modules.player_profile import get_all_players, get_player_profile, get_most_consistent_players, get_latest_member_stats, get_all_season_winners
+from modules.player_profile import (
+    get_all_players, get_player_profile, get_most_consistent_players,
+    get_latest_member_stats, get_all_season_winners,
+    get_hall_of_fame, get_guild_health, get_active_streak, get_newcomers,
+)
 from modules.comparisons import (
     gbg_season_comparison, qi_season_comparison,
     detect_player_status, most_improved_gbg, most_improved_qi, sort_seasons,
@@ -228,19 +232,80 @@ if page == "🏴 Overview":
     if gbg_tots.empty and qi_tots.empty:
         st.info("👋 Welcome! Head to **📥 Data Import** to upload your first season CSV.")
     else:
-        c1, c2, c3, c4 = st.columns(4)
+        # ── KPI row ───────────────────────────────────────────────────────
+        health = get_guild_health(gbg_df, qi_df, members_df)
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
         with c1:
             st.metric("Total Guild Fights", f"{int(gbg_df['Fights'].sum()):,}" if not gbg_df.empty else "—")
         with c2:
             st.metric("Total QI Progress", f"{int(qi_df['Progress'].sum()):,}" if not qi_df.empty else "—")
         with c3:
-            st.metric("GBG Players Tracked", gbg_df["Player_ID"].nunique() if not gbg_df.empty else 0)
+            st.metric("GBG Seasons", gbg_df["season"].nunique() if not gbg_df.empty else 0)
         with c4:
-            st.metric("QI Players Tracked", qi_df["Player_ID"].nunique() if not qi_df.empty else 0)
+            st.metric("QI Seasons", qi_df["season"].nunique() if not qi_df.empty else 0)
+        with c5:
+            part = health.get("gbg_participation")
+            st.metric("GBG Participation", f"{part}%" if part is not None else "—",
+                      help=f"{health.get('gbg_players','?')} of {health.get('total_members','?')} members active last season")
+        with c6:
+            inactive = health.get("inactive_count")
+            st.metric("Zero Fights Last Season", inactive if inactive is not None else "—",
+                      delta=None if inactive is None else (f"⚠️ {inactive} inactive" if inactive > 0 else "✅ All active"),
+                      delta_color="inverse")
+
+        # ── Guild health strip ────────────────────────────────────────────
+        goods_latest = health.get("total_goods_latest")
+        goods_delta  = health.get("goods_delta")
+        inactive_names = health.get("inactive_players", [])
+        if goods_latest or inactive_names:
+            hc1, hc2 = st.columns(2)
+            with hc1:
+                if goods_latest:
+                    delta_str = f"{goods_delta:+,}" if goods_delta is not None else None
+                    st.metric("Total Guild Goods (Latest Snapshot)", f"{goods_latest:,}", delta=delta_str)
+            with hc2:
+                if inactive_names:
+                    st.markdown(
+                        f'<div class="section-title">⚠️ Zero Fights — Latest GBG Season</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(", ".join(inactive_names))
 
         st.markdown("---")
-        col_l, col_r = st.columns(2)
 
+        # ── Season vs season KPI comparison ──────────────────────────────
+        gbg_seasons = sort_seasons(gbg_df["season"].unique().tolist()) if not gbg_df.empty else []
+        qi_seasons  = sort_seasons(qi_df["season"].unique().tolist())  if not qi_df.empty  else []
+
+        if len(gbg_seasons) >= 2 or len(qi_seasons) >= 2:
+            st.markdown('<div class="section-title">📊 Season vs Season Comparison</div>', unsafe_allow_html=True)
+            kc1, kc2, kc3, kc4 = st.columns(4)
+            if len(gbg_seasons) >= 2:
+                curr_s, prev_s = gbg_seasons[-1], gbg_seasons[-2]
+                curr_fights = int(gbg_df[gbg_df["season"] == curr_s]["Fights"].sum())
+                prev_fights = int(gbg_df[gbg_df["season"] == prev_s]["Fights"].sum())
+                delta_f     = curr_fights - prev_fights
+                curr_players = gbg_df[gbg_df["season"] == curr_s]["Player_ID"].nunique()
+                prev_players = gbg_df[gbg_df["season"] == prev_s]["Player_ID"].nunique()
+                with kc1:
+                    st.metric(f"GBG Fights ({curr_s})", f"{curr_fights:,}", delta=f"{delta_f:+,}")
+                with kc2:
+                    st.metric("GBG Players", curr_players, delta=curr_players - prev_players)
+            if len(qi_seasons) >= 2:
+                curr_qs, prev_qs = qi_seasons[-1], qi_seasons[-2]
+                curr_prog = int(qi_df[qi_df["season"] == curr_qs]["Progress"].sum())
+                prev_prog = int(qi_df[qi_df["season"] == prev_qs]["Progress"].sum())
+                delta_p   = curr_prog - prev_prog
+                curr_qp   = qi_df[qi_df["season"] == curr_qs]["Player_ID"].nunique()
+                prev_qp   = qi_df[qi_df["season"] == prev_qs]["Player_ID"].nunique()
+                with kc3:
+                    st.metric(f"QI Progress ({curr_qs})", f"{curr_prog:,}", delta=f"{delta_p:+,}")
+                with kc4:
+                    st.metric("QI Players", curr_qp, delta=curr_qp - prev_qp)
+            st.markdown("---")
+
+        # ── Trend charts + season totals ──────────────────────────────────
+        col_l, col_r = st.columns(2)
         with col_l:
             st.markdown(f'<div class="section-title">{gbg_icon()} GBG Season Totals</div>', unsafe_allow_html=True)
             if not gbg_tots.empty:
@@ -253,7 +318,6 @@ if page == "🏴 Overview":
                     }).set_index("Season"),
                     use_container_width=True,
                 )
-
         with col_r:
             st.markdown(f'<div class="section-title">{qi_icon()} QI Season Totals</div>', unsafe_allow_html=True)
             if not qi_tots.empty:
@@ -267,13 +331,14 @@ if page == "🏴 Overview":
                 )
 
         st.markdown("---")
+
+        # ── Top contributors ──────────────────────────────────────────────
         col_a, col_b = st.columns(2)
         with col_a:
             st.markdown(f'<div class="section-title">{gbg_icon()} Top GBG Contributors (Latest)</div>', unsafe_allow_html=True)
             top_gbg = hide_pid(gbg_top(gbg_df, n=10))
             if not top_gbg.empty:
                 st.dataframe(top_gbg.reset_index(drop=True), use_container_width=True, hide_index=True)
-
         with col_b:
             st.markdown(f'<div class="section-title">{qi_icon()} Top QI Contributors (Latest)</div>', unsafe_allow_html=True)
             top_qi = hide_pid(qi_top(qi_df, n=10))
@@ -281,6 +346,8 @@ if page == "🏴 Overview":
                 st.dataframe(top_qi.reset_index(drop=True), use_container_width=True, hide_index=True)
 
         st.markdown("---")
+
+        # ── Veteran ranking ───────────────────────────────────────────────
         avg1, avg2 = st.columns(2)
         with avg1:
             st.markdown(f'<div class="section-title">{gbg_icon()} Top 10 Avg Fights / Season (GBG)</div>', unsafe_allow_html=True)
@@ -298,6 +365,83 @@ if page == "🏴 Overview":
                 st.info("No QI data yet.")
 
         st.markdown("---")
+
+        # ── Player spotlights ─────────────────────────────────────────────
+        st.markdown('<div class="section-title">🔦 Player Spotlights</div>', unsafe_allow_html=True)
+        sp1, sp2, sp3, sp4 = st.columns(4)
+
+        with sp1:
+            st.markdown("**🚀 Most Improved (GBG Fights)**")
+            imp_gbg = most_improved_gbg(gbg_df, "Fights") if not gbg_df.empty else pd.DataFrame()
+            if not imp_gbg.empty:
+                top = imp_gbg.iloc[0]
+                name    = top.get("Player", "—")
+                delta   = top.get("Fights_delta", 0)
+                pct     = top.get("Fights_pct", 0)
+                sign    = "+" if delta >= 0 else ""
+                st.markdown(f"**{name}**")
+                st.markdown(f'<span style="color:#2ECC71;font-size:1rem;">{sign}{int(delta):,} fights ({sign}{pct:.1f}%)</span>', unsafe_allow_html=True)
+            else:
+                st.info("Need 2+ seasons")
+
+        with sp2:
+            st.markdown("**⚠️ Biggest Drop-off (GBG)**")
+            drop_gbg = most_improved_gbg(gbg_df, "Fights") if not gbg_df.empty else pd.DataFrame()
+            if not drop_gbg.empty:
+                bottom = drop_gbg.iloc[-1]
+                name   = bottom.get("Player", "—")
+                delta  = bottom.get("Fights_delta", 0)
+                pct    = bottom.get("Fights_pct", 0)
+                sign   = "+" if delta >= 0 else ""
+                colour = "#E74C3C" if delta < 0 else "#2ECC71"
+                st.markdown(f"**{name}**")
+                st.markdown(f'<span style="color:{colour};font-size:1rem;">{sign}{int(delta):,} fights ({sign}{pct:.1f}%)</span>', unsafe_allow_html=True)
+            else:
+                st.info("Need 2+ seasons")
+
+        with sp3:
+            st.markdown("**🔥 Longest Active Streak**")
+            streaks = get_active_streak(gbg_df, qi_df)
+            if not streaks.empty:
+                top_s = streaks.iloc[0]
+                st.markdown(f"**{top_s['Player']}**")
+                st.markdown(f'<span style="color:#FFD700;font-size:1rem;">{top_s["Streak"]} consecutive seasons</span>', unsafe_allow_html=True)
+            else:
+                st.info("No data")
+
+        with sp4:
+            st.markdown("**🌟 Newcomers This Season**")
+            newcomers = get_newcomers(gbg_df, qi_df)
+            if newcomers:
+                for n in newcomers[:5]:
+                    st.markdown(f'<span style="color:#4A90D9;">• {n}</span>', unsafe_allow_html=True)
+                if len(newcomers) > 5:
+                    st.caption(f"+{len(newcomers)-5} more")
+            else:
+                st.info("No newcomers")
+
+        st.markdown("---")
+
+        # ── Hall of Fame ──────────────────────────────────────────────────
+        hof1, hof2 = st.columns([1, 2])
+        with hof1:
+            st.markdown('<div class="section-title">🏆 Hall of Fame — All-Time #1 Finishers</div>', unsafe_allow_html=True)
+            hof = get_hall_of_fame(gbg_df, qi_df)
+            if not hof.empty:
+                st.dataframe(hof, use_container_width=True, hide_index=False)
+            else:
+                st.info("No season winners yet.")
+        with hof2:
+            st.markdown('<div class="section-title">🔥 Longest Active Streaks (GBG)</div>', unsafe_allow_html=True)
+            streaks_full = get_active_streak(gbg_df, qi_df)
+            if not streaks_full.empty:
+                st.dataframe(streaks_full, use_container_width=True, hide_index=False)
+            else:
+                st.info("No streak data.")
+
+        st.markdown("---")
+
+        # ── Player status ─────────────────────────────────────────────────
         st.markdown('<div class="section-title">📋 Player Status — Latest Season</div>', unsafe_allow_html=True)
         status_df = detect_player_status(gbg_df, qi_df)
         if not status_df.empty:
