@@ -1,11 +1,3 @@
-[theme]
-base = "light"
-primaryColor = "#4A90D9"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#1A1D27"
-textColor = "#1A1A2E"
-font = "sans serif"
-
 [server]
 headless = true
 enableCORS = false
