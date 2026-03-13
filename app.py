@@ -227,10 +227,88 @@ with st.sidebar:
             )
         st.markdown("---")
 
-    # ── Player quick-jump ─────────────────────────────────────────────────
+    # ── Participation Tracker ─────────────────────────────────────────────
     _gbg_tmp     = get_gbg_df()
     _qi_tmp      = get_qi_df()
     _members_tmp = get_members_df()
+
+    _show_tracker = not _gbg_tmp.empty
+    if _show_tracker:
+        _gbg_seasons = sort_seasons(_gbg_tmp["season"].unique().tolist())
+        _latest_s    = _gbg_seasons[-1]
+
+        # New players this season (first ever appearance in GBG)
+        _new_players = []
+        if len(_gbg_seasons) >= 2:
+            _prev_pids  = set(_gbg_tmp[_gbg_tmp["season"] != _latest_s]["Player_ID"].astype(str))
+            _latest_rows = _gbg_tmp[_gbg_tmp["season"] == _latest_s]
+            for _, _r in _latest_rows.iterrows():
+                if str(_r["Player_ID"]) not in _prev_pids:
+                    _new_players.append(_r["Player"])
+
+        # Left the guild (was in previous season, not in latest)
+        _left_players = []
+        if len(_gbg_seasons) >= 2:
+            _prev_s    = _gbg_seasons[-2]
+            _prev_pids2 = set(_gbg_tmp[_gbg_tmp["season"] == _prev_s]["Player_ID"].astype(str))
+            _curr_pids2 = set(_gbg_tmp[_gbg_tmp["season"] == _latest_s]["Player_ID"].astype(str))
+            _left_pids  = _prev_pids2 - _curr_pids2
+            for _pid in _left_pids:
+                _rows = _gbg_tmp[_gbg_tmp["Player_ID"].astype(str) == _pid]
+                if not _rows.empty:
+                    _left_players.append(_rows["Player"].iloc[0])
+
+        # Inactive — in latest season but 0 fights
+        _inactive_players = []
+        _below_min_players = []
+        _latest_gbg = _gbg_tmp[_gbg_tmp["season"] == _latest_s]
+        for _, _r in _latest_gbg.iterrows():
+            _fights = int(_r.get("Fights", 0))
+            if _fights == 0:
+                _inactive_players.append(_r["Player"])
+            elif _fights < 1000:
+                _below_min_players.append((_r["Player"], _fights))
+
+        if _new_players or _left_players or _inactive_players or _below_min_players:
+            st.markdown(
+                '<div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;'
+                'letter-spacing:1px;margin-bottom:6px;">Participation Tracker</div>',
+                unsafe_allow_html=True,
+            )
+
+            def _sidebar_pill_list(emoji, label, colour, names_with_sub=None, names=None):
+                items = ""
+                if names_with_sub:
+                    items = "".join(
+                        f'<div style="color:#C8C8C8;font-size:0.75rem;padding:1px 0;">'
+                        f'• {n} <span style="color:#8A8D9A;">({v:,})</span></div>'
+                        for n, v in names_with_sub
+                    )
+                elif names:
+                    items = "".join(
+                        f'<div style="color:#C8C8C8;font-size:0.75rem;padding:1px 0;">• {n}</div>'
+                        for n in names
+                    )
+                if not items:
+                    return
+                st.markdown(
+                    f'<div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:8px;'
+                    f'padding:10px 12px;margin-bottom:6px;">'
+                    f'<div style="color:{colour};font-size:0.72rem;font-weight:700;'
+                    f'text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">'
+                    f'{emoji} {label}</div>'
+                    f'{items}</div>',
+                    unsafe_allow_html=True,
+                )
+
+            _sidebar_pill_list("🌟", "New This Season",       "#2ECC71", names=_new_players)
+            _sidebar_pill_list("⚠️", "Below Minimum (1,000)", "#F39C12",
+                               names_with_sub=sorted(_below_min_players, key=lambda x: x[1]))
+            _sidebar_pill_list("👋", "Left the Guild",        "#E74C3C", names=_left_players)
+            _sidebar_pill_list("💤", "Inactive (0 Fights)",   "#8A8D9A", names=_inactive_players)
+            st.markdown("---")
+
+    # ── Player quick-jump ─────────────────────────────────────────────────
     _all_players = get_all_players(_gbg_tmp, _qi_tmp, _members_tmp)
     _current     = _all_players.get("current", pd.DataFrame())
     if not _current.empty and "Player" in _current.columns:
