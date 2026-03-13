@@ -1783,9 +1783,9 @@ elif page == "📊 Metrics":
 
         st.markdown("---")
 
-        # ── Member leaderboards (Points / Goods / Battles) ────────────────
+        # ── Member leaderboards (Points / Goods / Battles / Streaks) ────────
         st.markdown('<div class="section-title">🏅 Member Leaderboards</div>', unsafe_allow_html=True)
-        ml1, ml2, ml3 = st.columns(3)
+        ml1, ml2, ml3, ml4 = st.columns(4)
 
         def _leaderboard_cards(title, icon, data, value_key, value_label, value_color, sub_key=None):
             st.markdown(f'<div class="section-title">{icon} {title}</div>', unsafe_allow_html=True)
@@ -1830,6 +1830,69 @@ elif page == "📊 Metrics":
         with ml3:
             battles_data = get_battles_leaderboard(members_df, gbg_df, qi_df)
             _leaderboard_cards("Top Won Battles", "⚔️", battles_data, "won_battles", "Won Battles", "#2ECC71", "eraName")
+
+        with ml4:
+            st.markdown('<div class="section-title">🔥 Player Streaks</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div style="color:#8A8D9A;font-size:0.7rem;margin-bottom:8px;">'
+                'Seasons with 4,000+ GBG fights</div>',
+                unsafe_allow_html=True,
+            )
+            if gbg_df.empty:
+                st.info("No GBG data yet.")
+            else:
+                # Current players only
+                from modules.comparisons import sort_seasons as _ss4
+                _latest_s4   = _ss4(gbg_df["season"].unique().tolist())[-1]
+                _curr_pids4  = set(gbg_df[gbg_df["season"] == _latest_s4]["Player_ID"].astype(str))
+                _streak_df   = gbg_df[gbg_df["Player_ID"].astype(str).isin(_curr_pids4)].copy()
+
+                # Count seasons ≥ 4000 per player
+                _counts = (
+                    _streak_df[_streak_df["Fights"] >= 4000]
+                    .groupby(["Player_ID", "Player"])
+                    .size()
+                    .reset_index(name="seasons_above")
+                    .sort_values("seasons_above", ascending=False)
+                    .head(10)
+                    .reset_index(drop=True)
+                )
+
+                if _counts.empty:
+                    st.info("No players with 4,000+ fights yet.")
+                else:
+                    _medal_map4 = {0:"🥇", 1:"🥈", 2:"🥉"}
+                    _max4 = int(_counts["seasons_above"].iloc[0])
+                    for _i, (_, _r) in enumerate(_counts.iterrows()):
+                        _medal4 = _medal_map4.get(_i, f"#{_i+1}")
+                        _cnt    = int(_r["seasons_above"])
+                        _bar_w4 = int(_cnt / max(_max4, 1) * 100)
+                        _bar_c4 = "#FFD700" if _i==0 else "#C0C0C0" if _i==1 else "#CD7F32" if _i==2 else "#E74C3C"
+                        # also show current season status
+                        _curr_fights = gbg_df[
+                            (gbg_df["Player_ID"].astype(str) == str(_r["Player_ID"])) &
+                            (gbg_df["season"] == _latest_s4)
+                        ]["Fights"].sum()
+                        _on_fire = "🔥" if int(_curr_fights) >= 4000 else ""
+                        st.markdown(f"""
+                        <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                    padding:10px 14px;margin-bottom:6px;">
+                          <div style="display:flex;align-items:center;justify-content:space-between;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                              <span style="font-size:1rem;">{_medal4}</span>
+                              <div style="color:#E8E8E8;font-weight:700;font-size:0.88rem;">
+                                {_r['Player']} {_on_fire}
+                              </div>
+                            </div>
+                            <div style="text-align:right;">
+                              <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Seasons</div>
+                              <div style="color:#E74C3C;font-weight:800;font-size:0.9rem;">{_cnt}</div>
+                            </div>
+                          </div>
+                          <div style="background:#0E1117;border-radius:4px;height:3px;margin-top:7px;">
+                            <div style="background:{_bar_c4};width:{_bar_w4}%;height:3px;border-radius:4px;"></div>
+                          </div>
+                        </div>""", unsafe_allow_html=True)
 
         st.markdown("---")
 
