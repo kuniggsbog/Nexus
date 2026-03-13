@@ -1685,6 +1685,104 @@ elif page == "📊 Metrics":
 
         st.markdown("---")
 
+        # ── Guild Timeline ────────────────────────────────────────────────
+        st.markdown('<div class="section-title">📅 Guild Season Timeline</div>', unsafe_allow_html=True)
+
+        _tl_tabs = st.tabs(["⚔️ GBG Fights", "🌀 QI Progress"])
+
+        def _timeline_chart(df, value_col, colour, min_line=None):
+            if df.empty:
+                st.info("No data yet.")
+                return
+            from modules.comparisons import sort_seasons as _ss
+            import plotly.graph_objects as _go
+
+            _seasons  = _ss(df["season"].unique().tolist())
+            _totals   = [int(df[df["season"] == s][value_col].sum()) for s in _seasons]
+            _max_val  = max(_totals) if _totals else 1
+
+            fig = _go.Figure()
+
+            # Bar chart
+            _bar_colors = []
+            for v in _totals:
+                if min_line and v < min_line:
+                    _bar_colors.append("#E74C3C")
+                else:
+                    _bar_colors.append(colour)
+
+            fig.add_trace(_go.Bar(
+                x=_seasons, y=_totals,
+                marker=dict(color=_bar_colors, line=dict(width=0)),
+                text=[f"{v/1e6:.1f}M" if v >= 1_000_000 else f"{v:,}" for v in _totals],
+                textposition="outside",
+                textfont=dict(color="#E8E8E8", size=11),
+                hovertemplate="<b>%{x}</b><br>" + value_col + ": %{y:,}<extra></extra>",
+                name=value_col,
+            ))
+
+            # Trend line
+            if len(_totals) > 1:
+                fig.add_trace(_go.Scatter(
+                    x=_seasons, y=_totals,
+                    mode="lines+markers",
+                    line=dict(color="rgba(255,255,255,0.25)", width=2, dash="dot"),
+                    marker=dict(size=6, color=colour),
+                    showlegend=False,
+                    hoverinfo="skip",
+                ))
+
+            fig.update_layout(
+                paper_bgcolor="#0E1117", plot_bgcolor="#0E1117",
+                font=dict(color="#E8E8E8", family="Inter, sans-serif"),
+                margin=dict(l=20, r=20, t=30, b=60),
+                height=320,
+                xaxis=dict(
+                    gridcolor="rgba(0,0,0,0)", linecolor="#2A2D3A",
+                    tickangle=-30, tickfont=dict(size=11),
+                ),
+                yaxis=dict(gridcolor="#1A1D27", linecolor="#2A2D3A", tickformat=".2s"),
+                bargap=0.25,
+                showlegend=False,
+            )
+            st.plotly_chart(fig, width="stretch")
+
+            # Season-by-season bar cards
+            _prev = None
+            for s, v in zip(_seasons, _totals):
+                _delta_html = ""
+                if _prev is not None:
+                    _d    = v - _prev
+                    _sign = "+" if _d >= 0 else ""
+                    _dc   = "#2ECC71" if _d >= 0 else "#E74C3C"
+                    _delta_html = f'<span style="color:{_dc};font-size:0.8rem;font-weight:600;margin-left:10px;">{_sign}{_d:,}</span>'
+                _bar_w  = int(v / max(_max_val, 1) * 100)
+                _bar_c  = "#E74C3C" if (min_line and v < min_line) else colour
+                _v_str  = f"{v:,}"
+                st.markdown(f"""
+                <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                            padding:10px 16px;margin-bottom:5px;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div style="color:#8A8D9A;font-weight:600;font-size:0.88rem;">{s}</div>
+                    <div style="display:flex;align-items:center;">
+                      <span style="color:{_bar_c};font-weight:800;font-size:1rem;">{_v_str}</span>
+                      {_delta_html}
+                    </div>
+                  </div>
+                  <div style="background:#0E1117;border-radius:4px;height:5px;margin-top:8px;">
+                    <div style="background:{_bar_c};width:{_bar_w}%;height:5px;border-radius:4px;"></div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
+                _prev = v
+
+        with _tl_tabs[0]:
+            _timeline_chart(gbg_df, "Fights", "#FFD700")
+
+        with _tl_tabs[1]:
+            _timeline_chart(qi_df, "Progress", "#9B59B6")
+
+        st.markdown("---")
+
         # ── Member leaderboards (Points / Goods / Battles) ────────────────
         st.markdown('<div class="section-title">🏅 Member Leaderboards</div>', unsafe_allow_html=True)
         ml1, ml2, ml3 = st.columns(3)
