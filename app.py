@@ -462,18 +462,22 @@ elif page == "👤 Player Profiles":
                         card_class  = "player-card-former" if is_former else "player-card"
                         former_tag  = '<span class="former-badge">LEFT GUILD</span>' if is_former else ""
 
-                        # Member stats for card
+                        # Member stats for card — pre-format to avoid f-string conflicts
                         mem = get_latest_member_stats(members_df, pid)
                         stats_html = ""
                         if mem:
+                            pts  = f"{mem['points']:,}"
+                            era  = mem['eraName']
+                            wb   = f"{mem['won_battles']:,}"
+                            gg   = f"{mem['guildgoods']:,}"
                             stats_html = (
                                 f'<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">'
-                                f'<span style="color:#FFD700;font-size:0.8rem;font-weight:700;">🏅 {mem["points"]:,}</span>'
-                                f'<span style="color:#8A8D9A;font-size:0.78rem;">· {mem["eraName"]}</span>'
+                                f'<span style="color:#FFD700;font-size:0.8rem;font-weight:700;">🏅 {pts}</span>'
+                                f'<span style="color:#8A8D9A;font-size:0.78rem;">· {era}</span>'
                                 f'</div>'
                                 f'<div style="margin-top:4px;display:flex;gap:12px;">'
-                                f'<span style="color:#2ECC71;font-size:0.75rem;">⚔️ {mem["won_battles"]:,} battles</span>'
-                                f'<span style="color:#4A90D9;font-size:0.75rem;">📦 {mem["guildgoods"]:,} goods</span>'
+                                f'<span style="color:#2ECC71;font-size:0.75rem;">⚔️ {wb} battles</span>'
+                                f'<span style="color:#4A90D9;font-size:0.75rem;">📦 {gg} goods</span>'
                                 f'</div>'
                             )
 
@@ -525,45 +529,49 @@ elif page == "👤 Player Profiles":
             former_tag  = '<span class="former-badge" style="font-size:0.8rem;">LEFT GUILD</span>' if profile["is_former"] else ""
 
             mem = profile.get("member_stats", {})
-            mem_html = ""
-            if mem:
-                mem_html = f"""
-                <div style="display:flex;flex-wrap:wrap;gap:20px;margin-top:14px;">
-                  <div>
-                    <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Points</div>
-                    <div style="color:#FFD700;font-size:1.2rem;font-weight:800;">{mem['points']:,}</div>
-                  </div>
-                  <div>
-                    <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Era</div>
-                    <div style="color:#E8E8E8;font-size:1.1rem;font-weight:700;">{mem['eraName']}</div>
-                  </div>
-                  <div>
-                    <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Won Battles</div>
-                    <div style="color:#2ECC71;font-size:1.1rem;font-weight:700;">{mem['won_battles']:,}</div>
-                  </div>
-                  <div>
-                    <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Guild Goods Daily</div>
-                    <div style="color:#4A90D9;font-size:1.1rem;font-weight:700;">{mem['guildgoods']:,}</div>
-                  </div>
-                  <div>
-                    <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Guild Rank</div>
-                    <div style="color:#E8E8E8;font-size:1.1rem;font-weight:700;">#{mem['rank']}</div>
-                  </div>
-                </div>
-                <div style="margin-top:8px;color:#5A5D6A;font-size:0.72rem;">As of: {mem['snapshot']}</div>
-                """
 
+            # ── Profile hero (avatar + name only) ────────────────────────
             st.markdown(f"""
             <div class="profile-hero">
               <div style="display:flex;align-items:flex-start;gap:22px;">
                 {avatar_html}
                 <div style="flex:1;">
                   <p class="{name_class}">{profile['player_name']} {former_tag}</p>
-                  {mem_html}
                 </div>
               </div>
             </div>
             """, unsafe_allow_html=True)
+
+            # ── Member stats bar (separate render to avoid f-string conflict) ──
+            if mem:
+                st.markdown(f"""
+                <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:12px;
+                            padding:16px 22px;margin-bottom:16px;">
+                  <div style="display:flex;flex-wrap:wrap;gap:28px;">
+                    <div>
+                      <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Points</div>
+                      <div style="color:#FFD700;font-size:1.2rem;font-weight:800;">{mem['points']:,}</div>
+                    </div>
+                    <div>
+                      <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Era</div>
+                      <div style="color:#E8E8E8;font-size:1.1rem;font-weight:700;">{mem['eraName']}</div>
+                    </div>
+                    <div>
+                      <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Won Battles</div>
+                      <div style="color:#2ECC71;font-size:1.1rem;font-weight:700;">{mem['won_battles']:,}</div>
+                    </div>
+                    <div>
+                      <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Guild Goods Daily</div>
+                      <div style="color:#4A90D9;font-size:1.1rem;font-weight:700;">{mem['guildgoods']:,}</div>
+                    </div>
+                    <div>
+                      <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Guild Rank</div>
+                      <div style="color:#E8E8E8;font-size:1.1rem;font-weight:700;">#{mem['rank']}</div>
+                    </div>
+                  </div>
+                  <div style="margin-top:8px;color:#5A5D6A;font-size:0.72rem;">As of: {mem['snapshot']}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
             tab_gbg_p, tab_qi_p = st.tabs([
                 f"{'⚔️' if not gbg_icon() else ''} GBG History",
