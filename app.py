@@ -189,7 +189,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.markdown("---")
-    _nav_default = ["🏴 Dashboard", "⚔️ GBG", "🌀 QI", "👤 Player Profiles", "📥 Data Import"]
+    _nav_default = ["🏴 Dashboard", "⚔️ GBG", "🌀 QI", "👤 Player Profiles", "📊 Metrics", "📥 Data Import"]
     page = st.radio(
         "Navigate",
         _nav_default,
@@ -269,12 +269,19 @@ with st.sidebar:
             elif _fights < 1000:
                 _below_min_players.append((_r["Player"], _fights))
 
-        if _new_players or _left_players or _inactive_players or _below_min_players:
+        st.markdown(
+            '<div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;'
+            'letter-spacing:1px;margin-bottom:6px;">Participation Tracker</div>',
+            unsafe_allow_html=True,
+        )
+
+        if not (_new_players or _left_players or _inactive_players or _below_min_players):
             st.markdown(
-                '<div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;'
-                'letter-spacing:1px;margin-bottom:6px;">Participation Tracker</div>',
+                '<div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:8px;'
+                'padding:10px 12px;margin-bottom:6px;color:#2ECC71;font-size:0.78rem;">✅ All members on track</div>',
                 unsafe_allow_html=True,
             )
+        else:
 
             def _sidebar_pill_list(emoji, label, colour, names_with_sub=None, names=None):
                 items = ""
@@ -306,7 +313,7 @@ with st.sidebar:
                                names_with_sub=sorted(_below_min_players, key=lambda x: x[1]))
             _sidebar_pill_list("👋", "Left the Guild",        "#E74C3C", names=_left_players)
             _sidebar_pill_list("💤", "Inactive (0 Fights)",   "#8A8D9A", names=_inactive_players)
-            st.markdown("---")
+        st.markdown("---")
 
     # ── Player quick-jump ─────────────────────────────────────────────────
     _all_players = get_all_players(_gbg_tmp, _qi_tmp, _members_tmp)
@@ -1599,3 +1606,178 @@ elif page == "📥 Data Import":
         with c3:
             st.download_button("⬇️ Members Template", mem_sample, "members_template.csv", "text/csv")
             st.code(mem_sample)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# PAGE: METRICS
+# ══════════════════════════════════════════════════════════════════════════
+elif page == "📊 Metrics":
+    st.markdown("# 📊 Metrics")
+
+    if gbg_df.empty and qi_df.empty:
+        st.info("No data yet. Import a season in **📥 Data Import**.")
+    else:
+        # ── Guild Contribution Distribution ───────────────────────────────
+        st.markdown('<div class="section-title">🥧 Guild Contribution Distribution</div>', unsafe_allow_html=True)
+
+        _metric_tabs = st.tabs(["⚔️ GBG Fights", "🌀 QI Progress"])
+
+        def _contribution_chart(df, value_col, season_label, colour_main, colour_rest):
+            """Pie + breakdown cards for contribution share."""
+            if df.empty:
+                st.info("No data available.")
+                return
+
+            from modules.comparisons import sort_seasons as _ss
+            _seasons = _ss(df["season"].unique().tolist())
+            _latest  = df[df["season"] == _seasons[-1]].copy()
+
+            # Current players only
+            _curr_pids = set(df[df["season"] == _seasons[-1]]["Player_ID"].astype(str))
+            _latest = _latest[_latest["Player_ID"].astype(str).isin(_curr_pids)]
+
+            _total = _latest[value_col].sum()
+            if _total == 0:
+                st.info("No contributions recorded.")
+                return
+
+            _latest = _latest.sort_values(value_col, ascending=False).reset_index(drop=True)
+            _latest["pct"] = _latest[value_col] / _total * 100
+
+            top10   = _latest.head(10)
+            rest    = _latest.iloc[10:]
+            top10_pct  = top10["pct"].sum()
+            rest_pct   = rest["pct"].sum()
+            top10_val  = int(top10[value_col].sum())
+            rest_val   = int(rest[value_col].sum())
+
+            # ── Pie chart ──
+            import plotly.graph_objects as _go
+            _labels = top10["Player"].tolist()
+            _values = top10[value_col].tolist()
+            _colors_pie = [
+                "#FFD700","#C0C0C0","#CD7F32",
+                "#4A90D9","#9B59B6","#2ECC71",
+                "#E74C3C","#F39C12","#1ABC9C","#E67E22",
+            ]
+            if rest_pct > 0:
+                _labels.append(f"Rest of guild ({len(rest)} players)")
+                _values.append(int(rest_val))
+                _colors_pie.append("#2A2D3A")
+
+            _fig = _go.Figure(_go.Pie(
+                labels=_labels, values=_values,
+                hole=0.52,
+                marker=dict(colors=_colors_pie[:len(_labels)],
+                            line=dict(color="#0E1117", width=2)),
+                textinfo="label+percent",
+                textfont=dict(size=11),
+                hovertemplate="<b>%{label}</b><br>%{value:,}<br>%{percent}<extra></extra>",
+            ))
+            _fig.update_layout(
+                paper_bgcolor="#0E1117", plot_bgcolor="#0E1117",
+                font=dict(color="#E8E8E8", family="Inter, sans-serif"),
+                margin=dict(l=10, r=10, t=40, b=10),
+                height=420,
+                title=dict(text=f"Contribution Share — {season_label}", font=dict(size=15)),
+                showlegend=False,
+            )
+            st.plotly_chart(_fig, width="stretch")
+
+            # ── Summary KPI strip ──
+            k1, k2, k3 = st.columns(3)
+            with k1:
+                st.markdown(f"""<div class="metric-card">
+                    <div class="metric-label">Total {value_col}</div>
+                    <div class="metric-value">{int(_total):,}</div>
+                </div>""", unsafe_allow_html=True)
+            with k2:
+                st.markdown(f"""<div class="metric-card">
+                    <div class="metric-label">Top 10 Share</div>
+                    <div class="metric-value" style="color:#FFD700;">{top10_pct:.1f}%</div>
+                    <div style="color:#8A8D9A;font-size:0.8rem;">{top10_val:,} {value_col.lower()}</div>
+                </div>""", unsafe_allow_html=True)
+            with k3:
+                st.markdown(f"""<div class="metric-card">
+                    <div class="metric-label">Rest of Guild Share</div>
+                    <div class="metric-value" style="color:#4A90D9;">{rest_pct:.1f}%</div>
+                    <div style="color:#8A8D9A;font-size:0.8rem;">{rest_val:,} {value_col.lower()}</div>
+                </div>""", unsafe_allow_html=True)
+
+            # ── Per-player breakdown cards ──
+            st.markdown('<div class="section-title">Player Breakdown</div>', unsafe_allow_html=True)
+            _medal_map = {0:"🥇",1:"🥈",2:"🥉"}
+            _bar_colors = [
+                "#FFD700","#C0C0C0","#CD7F32",
+                "#4A90D9","#4A90D9","#4A90D9",
+                "#4A90D9","#4A90D9","#4A90D9","#4A90D9",
+            ]
+            for i, (_, row) in enumerate(_latest.iterrows()):
+                _medal   = _medal_map.get(i, f"#{i+1}")
+                _bar_pct = int(row["pct"])
+                _bc      = _bar_colors[i] if i < len(_bar_colors) else "#4A90D9"
+                _val     = int(row[value_col])
+                _pct_str = f"{row['pct']:.1f}%"
+                # width of bar = actual percentage (max ~30% typical, scale to 100% of max)
+                _bar_w   = int(row["pct"] / max(_latest["pct"].iloc[0], 1) * 100)
+                st.markdown(f"""
+                <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                            padding:10px 16px;margin-bottom:5px;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                      <span style="font-size:1rem;min-width:28px;">{_medal}</span>
+                      <span style="color:#E8E8E8;font-weight:700;font-size:0.92rem;">{row['Player']}</span>
+                    </div>
+                    <div style="display:flex;gap:24px;align-items:center;">
+                      <div style="text-align:right;">
+                        <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">{value_col}</div>
+                        <div style="color:#E8E8E8;font-weight:600;">{_val:,}</div>
+                      </div>
+                      <div style="text-align:right;min-width:48px;">
+                        <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Share</div>
+                        <div style="color:{_bc};font-weight:800;font-size:1rem;">{_pct_str}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div style="background:#0E1117;border-radius:4px;height:5px;margin-top:8px;">
+                    <div style="background:{_bc};width:{_bar_w}%;height:5px;border-radius:4px;"></div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
+
+            # Rest of guild summary row
+            if rest_pct > 0:
+                st.markdown(f"""
+                <div style="background:#12151E;border:1px solid #2A2D3A;border-radius:10px;
+                            padding:10px 16px;margin-bottom:5px;opacity:0.8;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                      <span style="font-size:1rem;min-width:28px;">👥</span>
+                      <span style="color:#8A8D9A;font-weight:600;font-size:0.92rem;">
+                        Rest of guild ({len(rest)} players)</span>
+                    </div>
+                    <div style="display:flex;gap:24px;align-items:center;">
+                      <div style="text-align:right;">
+                        <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">{value_col}</div>
+                        <div style="color:#8A8D9A;font-weight:600;">{rest_val:,}</div>
+                      </div>
+                      <div style="text-align:right;min-width:48px;">
+                        <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Share</div>
+                        <div style="color:#8A8D9A;font-weight:800;font-size:1rem;">{rest_pct:.1f}%</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
+
+        with _metric_tabs[0]:
+            if not gbg_df.empty:
+                _gbg_seasons = sort_seasons(gbg_df["season"].unique().tolist())
+                _contribution_chart(gbg_df, "Fights", _gbg_seasons[-1], "#FFD700", "#2A2D3A")
+            else:
+                st.info("No GBG data yet.")
+
+        with _metric_tabs[1]:
+            if not qi_df.empty:
+                _qi_seasons = sort_seasons(qi_df["season"].unique().tolist())
+                _contribution_chart(qi_df, "Progress", _qi_seasons[-1], "#9B59B6", "#2A2D3A")
+            else:
+                st.info("No QI data yet.")
