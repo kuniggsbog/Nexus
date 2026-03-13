@@ -6,13 +6,59 @@ import pandas as pd
 import numpy as np
 
 
-def sort_seasons(seasons: list[str]) -> list[str]:
-    """Sort seasons alphanumerically so S10 comes after S9."""
+def sort_seasons(seasons: list[str], descending: bool = False) -> list[str]:
+    """
+    Sort seasons intelligently:
+    - Date formats like '29 Jan - 09 Feb 2026' or '01 Mar 2025' are sorted by date.
+    - Alphanumeric formats like 'GBG_S1', 'S10' are sorted naturally.
+    - Mixed lists fall back to alphanumeric.
+    - descending=True puts most recent first.
+    """
     import re
-    def key(s):
-        parts = re.split(r'(\d+)', s)
-        return [int(p) if p.isdigit() else p.lower() for p in parts]
-    return sorted(seasons, key=key)
+    from datetime import datetime
+
+    MONTH_MAP = {
+        'jan':1,'feb':2,'mar':3,'apr':4,'may':5,'jun':6,
+        'jul':7,'aug':8,'sep':9,'oct':10,'nov':11,'dec':12
+    }
+
+    def parse_date(s: str):
+        """Try to extract the END date from a season string for sorting."""
+        s_clean = s.strip()
+        # Range format: '29 Jan - 09 Feb 2026' — use end date
+        range_match = re.search(
+            r'(\d{1,2})\s+([A-Za-z]{3})\s*[-–]\s*(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})', s_clean
+        )
+        if range_match:
+            day  = int(range_match.group(3))
+            mon  = MONTH_MAP.get(range_match.group(4).lower(), 0)
+            year = int(range_match.group(5))
+            return datetime(year, mon, day)
+
+        # Single date: '09 Feb 2026' or 'Feb 2026'
+        single_match = re.search(r'(\d{1,2})?\s*([A-Za-z]{3})\s+(\d{4})', s_clean)
+        if single_match:
+            day  = int(single_match.group(1)) if single_match.group(1) else 1
+            mon  = MONTH_MAP.get(single_match.group(2).lower(), 0)
+            year = int(single_match.group(3))
+            return datetime(year, mon, day)
+
+        return None
+
+    # Check if ALL seasons look like dates
+    parsed = [(s, parse_date(s)) for s in seasons]
+    all_dates = all(dt is not None for _, dt in parsed)
+
+    if all_dates:
+        result = sorted(parsed, key=lambda x: x[1], reverse=descending)
+    else:
+        # Alphanumeric fallback
+        def alphanum_key(s):
+            parts = re.split(r'(\d+)', s)
+            return [int(p) if p.isdigit() else p.lower() for p in parts]
+        result = [(s, None) for s in sorted(seasons, key=alphanum_key, reverse=descending)]
+
+    return [s for s, _ in result]
 
 
 def compute_change(current: float, previous: float) -> tuple[float, float]:
