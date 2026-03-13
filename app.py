@@ -29,7 +29,7 @@ from modules.qi_analysis import (
 from modules.player_profile import get_all_players, get_player_profile, get_most_consistent_players
 from modules.comparisons import (
     gbg_season_comparison, qi_season_comparison,
-    detect_player_status, most_improved_gbg, most_improved_qi,
+    detect_player_status, most_improved_gbg, most_improved_qi, sort_seasons,
 )
 from modules.charts import (
     gbg_fights_leaderboard, gbg_total_contribution_chart, gbg_guild_trend, gbg_player_trend,
@@ -186,9 +186,9 @@ with st.sidebar:
     st.markdown("---")
     seasons = get_all_seasons()
     if seasons["gbg"]:
-        st.markdown(f"**GBG:** {', '.join(seasons['gbg'])}")
+        st.markdown(f"**GBG:** {', '.join(sort_seasons(seasons['gbg'], descending=True))}")
     if seasons["qi"]:
-        st.markdown(f"**QI:** {', '.join(seasons['qi'])}")
+        st.markdown(f"**QI:** {', '.join(sort_seasons(seasons['qi'], descending=True))}")
 
 
 # ── Patch radio labels to include icons ───────────────────────────────────
@@ -300,7 +300,7 @@ elif page == "GBG":
     if gbg_df.empty:
         st.info("No GBG data yet. Import a season in **📥 Data Import**.")
     else:
-        seasons_list = get_all_seasons()["gbg"]
+        seasons_list = sort_seasons(get_all_seasons()["gbg"], descending=True)
         tab_lb, tab_charts, tab_comp, tab_cumu = st.tabs(
             ["🏅 Leaderboard", "📊 Charts", "📈 Season Comparison", "📦 Cumulative"]
         )
@@ -361,7 +361,7 @@ elif page == "QI":
     if qi_df.empty:
         st.info("No QI data yet. Import a season in **📥 Data Import**.")
     else:
-        qi_seasons_list = get_all_seasons()["qi"]
+        qi_seasons_list = sort_seasons(get_all_seasons()["qi"], descending=True)
         tab_lb, tab_charts, tab_comp, tab_cumu = st.tabs(
             ["🏅 Leaderboard", "📊 Charts", "📈 Season Comparison", "📦 Cumulative"]
         )
