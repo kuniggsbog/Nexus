@@ -595,11 +595,40 @@ elif page == "👤 Player Profiles":
                     <span class="{'profile-name-former' if profile['is_former'] else 'profile-name'}">{profile['player_name']}</span>
                     {former_tag}{medal_html}
                   </div>
-                  {stats_block}
                 </div>
               </div>
             </div>
             """, unsafe_allow_html=True)
+
+            if mem:
+                st.markdown(f"""
+                <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:12px;
+                            padding:16px 22px;margin-top:-8px;margin-bottom:16px;">
+                  <div style="display:flex;flex-wrap:wrap;gap:28px;">
+                    <div>
+                      <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Points</div>
+                      <div style="color:#FFD700;font-size:1.1rem;font-weight:800;">{pts_str}</div>
+                    </div>
+                    <div>
+                      <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Era</div>
+                      <div style="color:#E8E8E8;font-size:1.0rem;font-weight:700;">{era_str}</div>
+                    </div>
+                    <div>
+                      <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Won Battles</div>
+                      <div style="color:#2ECC71;font-size:1.0rem;font-weight:700;">{wb_str}</div>
+                    </div>
+                    <div>
+                      <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Guild Goods Daily</div>
+                      <div style="color:#4A90D9;font-size:1.0rem;font-weight:700;">{gg_str}</div>
+                    </div>
+                    <div>
+                      <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Guild Rank</div>
+                      <div style="color:#E8E8E8;font-size:1.0rem;font-weight:700;">{rank_str}</div>
+                    </div>
+                  </div>
+                  <div style="margin-top:8px;color:#5A5D6A;font-size:0.7rem;">As of: {snap_str}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
             tab_gbg_p, tab_qi_p = st.tabs([
                 f"{'⚔️' if not gbg_icon() else ''} GBG History",
