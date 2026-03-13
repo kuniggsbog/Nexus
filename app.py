@@ -190,12 +190,10 @@ with st.sidebar:
     )
     st.markdown("---")
     _nav_default = ["🏴 Dashboard", "⚔️ GBG", "🌀 QI", "👤 Player Profiles", "📥 Data Import"]
-    _nav_target  = st.session_state.pop("nav_page", None)
-    _nav_index   = _nav_default.index(_nav_target) if _nav_target in _nav_default else 0
     page = st.radio(
         "Navigate",
         _nav_default,
-        index=_nav_index,
+        key="nav_radio",
         label_visibility="collapsed",
         format_func=lambda x: x,
     )
@@ -245,7 +243,8 @@ with st.sidebar:
         _jump = st.selectbox("Player", _player_names, label_visibility="collapsed", key="sidebar_jump")
         if _jump != "—":
             st.session_state["profile_jump"] = _jump
-            st.session_state["nav_page"] = "👤 Player Profiles"
+            st.session_state["nav_radio"]    = "👤 Player Profiles"
+            st.session_state["sidebar_jump"] = "—"
             st.rerun()
 
 
