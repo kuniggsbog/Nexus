@@ -267,7 +267,11 @@ with st.sidebar:
             if _fights == 0:
                 _inactive_players.append(_r["Player"])
             elif _fights < 1000:
-                _below_min_players.append((_r["Player"], _fights))
+                # Count all seasons where this player was under 1,000 (including current)
+                _pid_str   = str(_r["Player_ID"])
+                _all_games = _gbg_tmp[_gbg_tmp["Player_ID"].astype(str) == _pid_str]
+                _times_under = int((_all_games["Fights"] < 1000).sum())
+                _below_min_players.append((_r["Player"], _fights, _times_under))
 
         st.markdown(
             '<div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;'
@@ -288,8 +292,12 @@ with st.sidebar:
                 if names_with_sub:
                     items = "".join(
                         f'<div style="color:#C8C8C8;font-size:0.75rem;padding:1px 0;">'
-                        f'• {n} <span style="color:#8A8D9A;">({v:,})</span></div>'
-                        for n, v in names_with_sub
+                        f'• {n} <span style="color:#8A8D9A;">({v:,})</span>'
+                        + (f' <span style="color:#5A5D6A;font-size:0.7rem;">({t}× total)</span>' if len(item) > 2 else '')
+                        + '</div>'
+                        for item in names_with_sub
+                        for n, v, *rest in [item]
+                        for t in [rest[0] if rest else None]
                     )
                 elif names:
                     items = "".join(
@@ -308,11 +316,11 @@ with st.sidebar:
                     unsafe_allow_html=True,
                 )
 
-            _sidebar_pill_list("🌟", "New This Season",       "#2ECC71", names=_new_players)
-            _sidebar_pill_list("⚠️", "Below Minimum (1,000)", "#F39C12",
+            _sidebar_pill_list("🌟", "New This Season",          "#2ECC71", names=_new_players)
+            _sidebar_pill_list("⚠️", "Below GBG Minimum (1,000)", "#F39C12",
                                names_with_sub=sorted(_below_min_players, key=lambda x: x[1]))
-            _sidebar_pill_list("👋", "Left the Guild",        "#E74C3C", names=_left_players)
-            _sidebar_pill_list("💤", "Inactive (0 Fights)",   "#8A8D9A", names=_inactive_players)
+            _sidebar_pill_list("👋", "Left the Guild",           "#E74C3C", names=_left_players)
+            _sidebar_pill_list("💤", "Inactive (0 Fights)",      "#8A8D9A", names=_inactive_players)
         st.markdown("---")
 
     # ── Player quick-jump ─────────────────────────────────────────────────
