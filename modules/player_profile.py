@@ -269,55 +269,166 @@ def get_most_consistent_players(gbg_df: pd.DataFrame, qi_df: pd.DataFrame, secti
         "score":          "⭐ Score",
     })
 
-def get_hall_of_fame(gbg_df: pd.DataFrame, qi_df: pd.DataFrame) -> pd.DataFrame:
-    """All-time #1 finishers ranked by total gold medals (GBG + QI combined)."""
-    wins = get_all_season_winners(gbg_df, qi_df)
+def _current_pids(gbg_df: pd.DataFrame, qi_df: pd.DataFrame) -> set:
+    """Return set of Player_IDs present in the latest season of either GBG or QI."""
+    pids = set()
+    for df in [gbg_df, qi_df]:
+        if not df.empty and "season" in df.columns:
+            latest = sort_seasons(df["season"].unique().tolist())[-1]
+            pids.update(df[df["season"] == latest]["Player_ID"].astype(str).tolist())
+    return pids
+
+
+def get_hall_of_fame(gbg_df: pd.DataFrame, qi_df: pd.DataFrame) -> list[dict]:
+    """
+    All-time #1 finishers — current players only — sorted by total medals.
+    Returns list of dicts for card rendering.
+    """
+    current = _current_pids(gbg_df, qi_df)
+    wins    = get_all_season_winners(gbg_df, qi_df)
     if wins.empty:
-        return pd.DataFrame()
-    # Join player names
+        return []
+
     names = {}
     for df in [gbg_df, qi_df]:
         if not df.empty:
-            for _, r in df[["Player_ID","Player"]].drop_duplicates().iterrows():
+            for _, r in df[["Player_ID", "Player"]].drop_duplicates().iterrows():
                 names[str(r["Player_ID"])] = r["Player"]
-    wins["Player"]  = wins["Player_ID"].map(names).fillna("Unknown")
-    wins["Total 🥇"] = wins["gbg_wins"] + wins["qi_wins"]
-    wins = wins[wins["Total 🥇"] > 0].sort_values("Total 🥇", ascending=False).reset_index(drop=True)
-    wins.index = wins.index + 1
-    return wins[["Player","gbg_wins","qi_wins","Total 🥇"]].rename(columns={
-        "gbg_wins": "⚔️ GBG #1s",
-        "qi_wins":  "🌀 QI #1s",
-    })
+
+    rows = []
+    for _, r in wins.iterrows():
+        pid = str(r["Player_ID"])
+        if pid not in current:
+            continue
+        total = int(r["gbg_wins"]) + int(r["qi_wins"])
+        if total == 0:
+            continue
+        rows.append({
+            "pid":      pid,
+            "player":   names.get(pid, "Unknown"),
+            "gbg_wins": int(r["gbg_wins"]),
+            "qi_wins":  int(r["qi_wins"]),
+            "total":    total,
+        })
+
+    return sorted(rows, key=lambda x: x["total"], reverse=True)
+
+
+def get_active_streak(gbg_df: pd.DataFrame, qi_df: pd.DataFrame) -> list[dict]:
+    """
+    Longest consecutive GBG season streak — current players only.
+    Returns list of dicts for card rendering.
+    """
+    if gbg_df.empty:
+        return []
+
+    seasons      = sort_seasons(gbg_df["season"].unique().tolist())
+    current      = _current_pids(gbg_df, qi_df)
+    results      = []
+
+    for pid in current:
+        pid_rows = gbg_df[gbg_df["Player_ID"].astype(str) == pid]
+        if pid_rows.empty:
+            continue
+        name           = pid_rows["Player"].iloc[0]
+        player_seasons = set(pid_rows["season"].tolist())
+        streak = 0
+        for s in reversed(seasons):
+            if s in player_seasons:
+                streak += 1
+            else:
+                break
+        results.append({
+            "player":        name,
+            "streak":        streak,
+            "total_seasons": len(player_seasons),
+        })
+
+    return sorted(results, key=lambda x: x["streak"], reverse=True)[:10]
+
+
+def get_newcomers(gbg_df: pd.DataFrame, qi_df: pd.DataFrame) -> list[dict]:
+    """
+    Players in their first ever season (latest season only) — returns list of dicts.
+    """
+    newcomers = {}
+    for df, section in [(gbg_df, "GBG"), (qi_df, "QI")]:
+        if df.empty:
+            continue
+        seasons = sort_seasons(df["season"].unique().tolist())
+        if len(seasons) < 2:
+            continue
+        latest    = seasons[-1]
+        prev_pids = set(df[df["season"] != latest]["Player_ID"].astype(str))
+        for _, r in df[df["season"] == latest].iterrows():
+            pid = str(r["Player_ID"])
+            if pid not in prev_pids:
+                if pid not in newcomers:
+                    newcomers[pid] = {"player": r["Player"], "sections": []}
+                newcomers[pid]["sections"].append(section)
+
+    return list(newcomers.values())
+
+
+def get_most_improved(gbg_df: pd.DataFrame, qi_df: pd.DataFrame) -> dict:
+    """
+    Most improved and biggest drop-off players between latest two GBG seasons.
+    Current players only. Returns dict with 'best' and 'worst' entries.
+    """
+    result = {"best": None, "worst": None}
+    if gbg_df.empty:
+        return result
+
+    seasons = sort_seasons(gbg_df["season"].unique().tolist())
+    if len(seasons) < 2:
+        return result
+
+    current  = _current_pids(gbg_df, qi_df)
+    curr_s   = seasons[-1]
+    prev_s   = seasons[-2]
+    curr_df  = gbg_df[gbg_df["season"] == curr_s][["Player_ID", "Player", "Fights"]]
+    prev_df  = gbg_df[gbg_df["season"] == prev_s][["Player_ID", "Fights"]].rename(columns={"Fights": "prev_Fights"})
+    merged   = curr_df.merge(prev_df, on="Player_ID")
+    merged   = merged[merged["Player_ID"].astype(str).isin(current)]
+    if merged.empty:
+        return result
+
+    merged["delta"] = merged["Fights"] - merged["prev_Fights"]
+    merged["pct"]   = ((merged["delta"] / merged["prev_Fights"].replace(0, 1)) * 100).round(1)
+
+    best  = merged.loc[merged["delta"].idxmax()]
+    worst = merged.loc[merged["delta"].idxmin()]
+
+    result["best"]  = {"player": best["Player"],  "delta": int(best["delta"]),  "pct": float(best["pct"]),  "curr": int(best["Fights"]),  "seasons": f"{prev_s} → {curr_s}"}
+    result["worst"] = {"player": worst["Player"], "delta": int(worst["delta"]), "pct": float(worst["pct"]), "curr": int(worst["Fights"]), "seasons": f"{prev_s} → {curr_s}"}
+    return result
 
 
 def get_guild_health(gbg_df: pd.DataFrame, qi_df: pd.DataFrame, members_df: pd.DataFrame) -> dict:
     """Compute guild health indicators for the latest season."""
     health = {}
 
-    # GBG participation rate vs members
     if not gbg_df.empty and not members_df.empty:
         seasons = sort_seasons(gbg_df["season"].unique().tolist())
         latest  = seasons[-1]
-        gbg_players = gbg_df[gbg_df["season"] == latest]["Player_ID"].nunique()
-        mem_snaps = sort_seasons(members_df["snapshot"].unique().tolist(), descending=True)
+        gbg_players   = gbg_df[gbg_df["season"] == latest]["Player_ID"].nunique()
+        mem_snaps     = sort_seasons(members_df["snapshot"].unique().tolist(), descending=True)
         total_members = members_df[members_df["snapshot"] == mem_snaps[0]]["Player_ID"].nunique()
         health["gbg_participation"] = round(gbg_players / total_members * 100) if total_members else 0
-        health["gbg_players"]  = gbg_players
-        health["total_members"] = total_members
+        health["gbg_players"]       = gbg_players
+        health["total_members"]     = total_members
         health["latest_gbg_season"] = latest
 
-    # Inactive in latest GBG (0 fights)
     if not gbg_df.empty:
-        seasons = sort_seasons(gbg_df["season"].unique().tolist())
-        latest  = seasons[-1]
+        seasons   = sort_seasons(gbg_df["season"].unique().tolist())
+        latest    = seasons[-1]
         latest_df = gbg_df[gbg_df["season"] == latest]
-        zero_fights = latest_df[latest_df["Fights"] == 0]
-        health["inactive_count"] = len(zero_fights)
-        health["inactive_players"] = zero_fights["Player"].tolist()
+        zero      = latest_df[latest_df["Fights"] == 0]
+        health["inactive_count"]   = len(zero)
+        health["inactive_players"] = zero["Player"].tolist()
 
-    # Guild goods trend (latest vs previous snapshot)
     if not members_df.empty and "guildgoods" in members_df.columns:
-        snaps = sort_seasons(members_df["snapshot"].unique().tolist(), descending=True)
+        snaps        = sort_seasons(members_df["snapshot"].unique().tolist(), descending=True)
         latest_goods = int(members_df[members_df["snapshot"] == snaps[0]]["guildgoods"].sum())
         health["total_goods_latest"] = latest_goods
         if len(snaps) >= 2:
@@ -327,52 +438,3 @@ def get_guild_health(gbg_df: pd.DataFrame, qi_df: pd.DataFrame, members_df: pd.D
             health["goods_delta"] = None
 
     return health
-
-
-def get_active_streak(gbg_df: pd.DataFrame, qi_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Find players with the longest consecutive season streak (GBG).
-    Only counts current players.
-    """
-    if gbg_df.empty:
-        return pd.DataFrame()
-
-    seasons = sort_seasons(gbg_df["season"].unique().tolist())
-    latest  = seasons[-1]
-    current_pids = set(gbg_df[gbg_df["season"] == latest]["Player_ID"].astype(str))
-
-    results = []
-    for pid in current_pids:
-        player_seasons = set(gbg_df[gbg_df["Player_ID"].astype(str) == pid]["season"].tolist())
-        name = gbg_df[gbg_df["Player_ID"].astype(str) == pid]["Player"].iloc[0]
-        # Count consecutive from most recent backwards
-        streak = 0
-        for s in reversed(seasons):
-            if s in player_seasons:
-                streak += 1
-            else:
-                break
-        results.append({"Player": name, "Streak": streak, "Total Seasons": len(player_seasons)})
-
-    df = pd.DataFrame(results).sort_values("Streak", ascending=False).head(10).reset_index(drop=True)
-    df.index = df.index + 1
-    return df
-
-
-def get_newcomers(gbg_df: pd.DataFrame, qi_df: pd.DataFrame) -> list[str]:
-    """Players appearing for the first time in the latest season."""
-    newcomers = []
-    for df, metric in [(gbg_df, "Fights"), (qi_df, "Progress")]:
-        if df.empty:
-            continue
-        seasons = sort_seasons(df["season"].unique().tolist())
-        if len(seasons) < 2:
-            continue
-        latest = seasons[-1]
-        prev_pids   = set(df[df["season"] != latest]["Player_ID"].astype(str))
-        latest_rows = df[df["season"] == latest]
-        for _, r in latest_rows.iterrows():
-            pid = str(r["Player_ID"])
-            if pid not in prev_pids and r["Player"] not in newcomers:
-                newcomers.append(r["Player"])
-    return newcomers

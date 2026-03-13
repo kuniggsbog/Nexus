@@ -31,7 +31,7 @@ from modules.qi_analysis import (
 from modules.player_profile import (
     get_all_players, get_player_profile, get_most_consistent_players,
     get_latest_member_stats, get_all_season_winners,
-    get_hall_of_fame, get_guild_health, get_active_streak, get_newcomers,
+    get_hall_of_fame, get_guild_health, get_active_streak, get_newcomers, get_most_improved,
 )
 from modules.comparisons import (
     gbg_season_comparison, qi_season_comparison,
@@ -368,74 +368,118 @@ if page == "🏴 Overview":
 
         # ── Player spotlights ─────────────────────────────────────────────
         st.markdown('<div class="section-title">🔦 Player Spotlights</div>', unsafe_allow_html=True)
+        improved = get_most_improved(gbg_df, qi_df)
+        streaks  = get_active_streak(gbg_df, qi_df)
+        newcomers = get_newcomers(gbg_df, qi_df)
+
         sp1, sp2, sp3, sp4 = st.columns(4)
 
+        def _stat_card(emoji, title, name, value_html, sub=""):
+            return f"""
+            <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:12px;
+                        padding:16px 18px;height:100%;min-height:120px;">
+              <div style="color:#8A8D9A;font-size:0.7rem;text-transform:uppercase;
+                          letter-spacing:1px;margin-bottom:6px;">{emoji} {title}</div>
+              <div style="color:#E8E8E8;font-size:1rem;font-weight:700;margin-bottom:4px;">{name}</div>
+              <div style="font-size:0.9rem;">{value_html}</div>
+              {"<div style='color:#5A5D6A;font-size:0.72rem;margin-top:6px;'>"+sub+"</div>" if sub else ""}
+            </div>"""
+
         with sp1:
-            st.markdown("**🚀 Most Improved (GBG Fights)**")
-            imp_gbg = most_improved_gbg(gbg_df, "Fights") if not gbg_df.empty else pd.DataFrame()
-            if not imp_gbg.empty:
-                top = imp_gbg.iloc[0]
-                name    = top.get("Player", "—")
-                delta   = top.get("Fights_delta", 0)
-                pct     = top.get("Fights_pct", 0)
-                sign    = "+" if delta >= 0 else ""
-                st.markdown(f"**{name}**")
-                st.markdown(f'<span style="color:#2ECC71;font-size:1rem;">{sign}{int(delta):,} fights ({sign}{pct:.1f}%)</span>', unsafe_allow_html=True)
+            b = improved.get("best")
+            if b:
+                sign  = "+" if b["delta"] >= 0 else ""
+                vhtml = f'<span style="color:#2ECC71;font-weight:700;">{sign}{b["delta"]:,} fights ({sign}{b["pct"]:.1f}%)</span>'
+                st.markdown(_stat_card("🚀","Most Improved", b["player"], vhtml, b["seasons"]), unsafe_allow_html=True)
             else:
-                st.info("Need 2+ seasons")
+                st.markdown(_stat_card("🚀","Most Improved","—","Need 2+ seasons",""), unsafe_allow_html=True)
 
         with sp2:
-            st.markdown("**⚠️ Biggest Drop-off (GBG)**")
-            drop_gbg = most_improved_gbg(gbg_df, "Fights") if not gbg_df.empty else pd.DataFrame()
-            if not drop_gbg.empty:
-                bottom = drop_gbg.iloc[-1]
-                name   = bottom.get("Player", "—")
-                delta  = bottom.get("Fights_delta", 0)
-                pct    = bottom.get("Fights_pct", 0)
-                sign   = "+" if delta >= 0 else ""
-                colour = "#E74C3C" if delta < 0 else "#2ECC71"
-                st.markdown(f"**{name}**")
-                st.markdown(f'<span style="color:{colour};font-size:1rem;">{sign}{int(delta):,} fights ({sign}{pct:.1f}%)</span>', unsafe_allow_html=True)
+            w = improved.get("worst")
+            if w:
+                sign  = "+" if w["delta"] >= 0 else ""
+                col   = "#E74C3C" if w["delta"] < 0 else "#2ECC71"
+                vhtml = f'<span style="color:{col};font-weight:700;">{sign}{w["delta"]:,} fights ({sign}{w["pct"]:.1f}%)</span>'
+                st.markdown(_stat_card("⚠️","Needs Attention", w["player"], vhtml, w["seasons"]), unsafe_allow_html=True)
             else:
-                st.info("Need 2+ seasons")
+                st.markdown(_stat_card("⚠️","Needs Attention","—","Need 2+ seasons",""), unsafe_allow_html=True)
 
         with sp3:
-            st.markdown("**🔥 Longest Active Streak**")
-            streaks = get_active_streak(gbg_df, qi_df)
-            if not streaks.empty:
-                top_s = streaks.iloc[0]
-                st.markdown(f"**{top_s['Player']}**")
-                st.markdown(f'<span style="color:#FFD700;font-size:1rem;">{top_s["Streak"]} consecutive seasons</span>', unsafe_allow_html=True)
+            if streaks:
+                top_s = streaks[0]
+                vhtml = f'<span style="color:#FFD700;font-weight:700;">{top_s["streak"]} consecutive seasons</span>'
+                sub   = f'{top_s["total_seasons"]} total seasons played'
+                st.markdown(_stat_card("🔥","Longest Streak", top_s["player"], vhtml, sub), unsafe_allow_html=True)
             else:
-                st.info("No data")
+                st.markdown(_stat_card("🔥","Longest Streak","—","No data",""), unsafe_allow_html=True)
 
         with sp4:
-            st.markdown("**🌟 Newcomers This Season**")
-            newcomers = get_newcomers(gbg_df, qi_df)
             if newcomers:
-                for n in newcomers[:5]:
-                    st.markdown(f'<span style="color:#4A90D9;">• {n}</span>', unsafe_allow_html=True)
-                if len(newcomers) > 5:
-                    st.caption(f"+{len(newcomers)-5} more")
+                names_html = "".join(
+                    f'<div style="color:#4A90D9;font-size:0.85rem;">• {n["player"]} '
+                    f'<span style="color:#5A5D6A;font-size:0.75rem;">({", ".join(n["sections"])})</span></div>'
+                    for n in newcomers[:4]
+                )
+                extra = f'+{len(newcomers)-4} more' if len(newcomers) > 4 else ""
+                st.markdown(f"""
+                <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:12px;
+                            padding:16px 18px;min-height:120px;">
+                  <div style="color:#8A8D9A;font-size:0.7rem;text-transform:uppercase;
+                              letter-spacing:1px;margin-bottom:8px;">🌟 Newcomers This Season</div>
+                  {names_html}
+                  {"<div style='color:#5A5D6A;font-size:0.72rem;margin-top:4px;'>"+extra+"</div>" if extra else ""}
+                </div>""", unsafe_allow_html=True)
             else:
-                st.info("No newcomers")
+                st.markdown(_stat_card("🌟","Newcomers This Season","—","No newcomers",""), unsafe_allow_html=True)
 
         st.markdown("---")
 
-        # ── Hall of Fame ──────────────────────────────────────────────────
-        hof1, hof2 = st.columns([1, 2])
+        # ── Hall of Fame + Active Streaks as cards ────────────────────────
+        hof_data = get_hall_of_fame(gbg_df, qi_df)
+        hof1, hof2 = st.columns(2)
+
         with hof1:
             st.markdown('<div class="section-title">🏆 Hall of Fame — All-Time #1 Finishers</div>', unsafe_allow_html=True)
-            hof = get_hall_of_fame(gbg_df, qi_df)
-            if not hof.empty:
-                st.dataframe(hof, use_container_width=True, hide_index=False)
+            if hof_data:
+                medal_map = {1:"🥇", 2:"🥈", 3:"🥉"}
+                for rank, row in enumerate(hof_data, 1):
+                    medal = medal_map.get(rank, f"#{rank}")
+                    gbg_b = f'<span style="color:#FFD700;">⚔️ {row["gbg_wins"]}× GBG</span>' if row["gbg_wins"] else ""
+                    qi_b  = f'<span style="color:#C0C0C0;">🌀 {row["qi_wins"]}× QI</span>'   if row["qi_wins"]  else ""
+                    gap   = "&nbsp;&nbsp;" if row["gbg_wins"] and row["qi_wins"] else ""
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                padding:12px 16px;margin-bottom:8px;display:flex;
+                                align-items:center;gap:14px;">
+                      <div style="font-size:1.4rem;min-width:32px;">{medal}</div>
+                      <div style="flex:1;">
+                        <div style="color:#E8E8E8;font-weight:700;font-size:0.95rem;">{row["player"]}</div>
+                        <div style="margin-top:4px;">{gbg_b}{gap}{qi_b}</div>
+                      </div>
+                      <div style="color:#FFD700;font-size:1.1rem;font-weight:800;">{row["total"]} 🥇</div>
+                    </div>""", unsafe_allow_html=True)
             else:
                 st.info("No season winners yet.")
+
         with hof2:
             st.markdown('<div class="section-title">🔥 Longest Active Streaks (GBG)</div>', unsafe_allow_html=True)
-            streaks_full = get_active_streak(gbg_df, qi_df)
-            if not streaks_full.empty:
-                st.dataframe(streaks_full, use_container_width=True, hide_index=False)
+            if streaks:
+                max_streak = streaks[0]["streak"] if streaks else 1
+                for rank, row in enumerate(streaks, 1):
+                    bar_pct = int(row["streak"] / max_streak * 100)
+                    bar_col = "#FFD700" if rank == 1 else "#4A90D9" if rank <= 3 else "#2A2D3A"
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                padding:12px 16px;margin-bottom:8px;">
+                      <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div style="color:#E8E8E8;font-weight:700;">#{rank} {row["player"]}</div>
+                        <div style="color:#FFD700;font-weight:800;">{row["streak"]} 🔥</div>
+                      </div>
+                      <div style="background:#0E1117;border-radius:4px;height:6px;margin-top:8px;">
+                        <div style="background:{bar_col};width:{bar_pct}%;height:6px;border-radius:4px;"></div>
+                      </div>
+                      <div style="color:#5A5D6A;font-size:0.72rem;margin-top:4px;">{row["total_seasons"]} total seasons</div>
+                    </div>""", unsafe_allow_html=True)
             else:
                 st.info("No streak data.")
 
