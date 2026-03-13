@@ -12,7 +12,9 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(__file__))
 
 from modules.importer import (
-    import_gbg, import_qi, get_gbg_df, get_qi_df, get_all_seasons, delete_season,
+    import_gbg, import_qi, import_members,
+    get_gbg_df, get_qi_df, get_members_df, get_member_snapshots,
+    get_all_seasons, delete_season,
 )
 from modules.gbg_analysis import (
     get_leaderboard as gbg_leaderboard,
@@ -26,7 +28,7 @@ from modules.qi_analysis import (
     get_top_contributors as qi_top,
     get_cumulative_progress,
 )
-from modules.player_profile import get_all_players, get_player_profile, get_most_consistent_players
+from modules.player_profile import get_all_players, get_player_profile, get_most_consistent_players, get_latest_member_stats
 from modules.comparisons import (
     gbg_season_comparison, qi_season_comparison,
     detect_player_status, most_improved_gbg, most_improved_qi, sort_seasons,
@@ -71,24 +73,28 @@ def flag_icon(size=22): return icon_html("flag_icon.png", size)
 
 # ── Avatar helper ──────────────────────────────────────────────────────────
 def get_avatar_html(player_name: str, size: int = 56) -> str:
-    """Return <img> if player_name.jpg exists, else styled initials div."""
+    """Return <img> if player_name.jpg exists, else styled initials div. Rectangular shape."""
     safe_name = player_name.strip()
     jpg_path = AVATAR_DIR / f"{safe_name}.jpg"
     png_path = AVATAR_DIR / f"{safe_name}.png"
+
+    # Rectangular dimensions — slightly wider than tall, like a game card
+    w = int(size * 1.0)
+    h = int(size * 1.2)
 
     for path in [jpg_path, png_path]:
         if path.exists():
             ext = "jpeg" if path.suffix == ".jpg" else "png"
             b64 = _img_to_b64(path)
-            return (f'<img src="data:{ext};base64,{b64}" '
-                    f'width="{size}" height="{size}" '
-                    f'style="border-radius:50%;object-fit:cover;">')
+            return (f'<img src="data:image/{ext};base64,{b64}" '
+                    f'width="{w}" height="{h}" '
+                    f'style="border-radius:6px;object-fit:cover;object-position:top;">')
 
     initials = "".join(w[0].upper() for w in safe_name.split()[:2]) or "?"
-    return (f'<div style="width:{size}px;height:{size}px;border-radius:50%;'
-            f'background:linear-gradient(135deg,#4A90D9 0%,#9B59B6 100%);'
+    return (f'<div style="width:{w}px;height:{h}px;border-radius:6px;'
+            f'background:linear-gradient(160deg,#4A90D9 0%,#9B59B6 100%);'
             f'display:flex;align-items:center;justify-content:center;'
-            f'font-size:{int(size*0.35)}px;font-weight:700;color:white;">'
+            f'font-size:{int(size*0.32)}px;font-weight:700;color:white;">'
             f'{initials}</div>')
 
 
@@ -196,8 +202,9 @@ with st.sidebar:
 #  and display the real icons in page headings instead)
 
 # ── Load data ──────────────────────────────────────────────────────────────
-gbg_df = get_gbg_df()
-qi_df  = get_qi_df()
+gbg_df     = get_gbg_df()
+qi_df      = get_qi_df()
+members_df = get_members_df()
 
 
 # ── Strip Player_ID from any display dataframe ─────────────────────────────
@@ -417,7 +424,7 @@ elif page == "QI":
 elif page == "👤 Player Profiles":
     st.title("👤 Player Profiles")
 
-    players = get_all_players(gbg_df, qi_df)
+    players = get_all_players(gbg_df, qi_df, members_df)
     current_players = players["current"]
     former_players  = players["former"]
 
@@ -450,18 +457,34 @@ elif page == "👤 Player Profiles":
                         if has_gbg: badges += '<span class="badge-gbg">GBG</span> '
                         if has_qi:  badges += '<span class="badge-qi">QI</span>'
 
-                        avatar_html = get_avatar_html(prow["Player"], size=52)
+                        avatar_html = get_avatar_html(prow["Player"], size=56)
                         name_class  = "player-name-former" if is_former else "player-name"
                         card_class  = "player-card-former" if is_former else "player-card"
                         former_tag  = '<span class="former-badge">LEFT GUILD</span>' if is_former else ""
 
+                        # Member stats for card
+                        mem = get_latest_member_stats(members_df, pid)
+                        stats_html = ""
+                        if mem:
+                            stats_html = (
+                                f'<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">'
+                                f'<span style="color:#FFD700;font-size:0.8rem;font-weight:700;">🏅 {mem["points"]:,}</span>'
+                                f'<span style="color:#8A8D9A;font-size:0.78rem;">· {mem["eraName"]}</span>'
+                                f'</div>'
+                                f'<div style="margin-top:4px;display:flex;gap:12px;">'
+                                f'<span style="color:#2ECC71;font-size:0.75rem;">⚔️ {mem["won_battles"]:,} battles</span>'
+                                f'<span style="color:#4A90D9;font-size:0.75rem;">📦 {mem["guildgoods"]:,} goods</span>'
+                                f'</div>'
+                            )
+
                         st.markdown(f"""
                         <div class="{card_class}">
-                          <div style="display:flex;align-items:center;gap:14px;">
+                          <div style="display:flex;align-items:flex-start;gap:14px;">
                             {avatar_html}
-                            <div>
+                            <div style="flex:1;min-width:0;">
                               <div class="{name_class}">{prow['Player']}{former_tag}</div>
-                              <div style="margin-top:6px;">{badges}</div>
+                              <div style="margin-top:4px;">{badges}</div>
+                              {stats_html}
                             </div>
                           </div>
                         </div>
@@ -496,17 +519,47 @@ elif page == "👤 Player Profiles":
                 st.session_state.selected_player = None
                 st.rerun()
 
-            profile = get_player_profile(pid, gbg_df, qi_df)
-            avatar_html = get_avatar_html(profile["player_name"], size=72)
+            profile     = get_player_profile(pid, gbg_df, qi_df, members_df)
+            avatar_html = get_avatar_html(profile["player_name"], size=80)
             name_class  = "profile-name-former" if profile["is_former"] else "profile-name"
             former_tag  = '<span class="former-badge" style="font-size:0.8rem;">LEFT GUILD</span>' if profile["is_former"] else ""
 
+            mem = profile.get("member_stats", {})
+            mem_html = ""
+            if mem:
+                mem_html = f"""
+                <div style="display:flex;flex-wrap:wrap;gap:20px;margin-top:14px;">
+                  <div>
+                    <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Points</div>
+                    <div style="color:#FFD700;font-size:1.2rem;font-weight:800;">{mem['points']:,}</div>
+                  </div>
+                  <div>
+                    <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Era</div>
+                    <div style="color:#E8E8E8;font-size:1.1rem;font-weight:700;">{mem['eraName']}</div>
+                  </div>
+                  <div>
+                    <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Won Battles</div>
+                    <div style="color:#2ECC71;font-size:1.1rem;font-weight:700;">{mem['won_battles']:,}</div>
+                  </div>
+                  <div>
+                    <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Guild Goods Daily</div>
+                    <div style="color:#4A90D9;font-size:1.1rem;font-weight:700;">{mem['guildgoods']:,}</div>
+                  </div>
+                  <div>
+                    <div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;">Guild Rank</div>
+                    <div style="color:#E8E8E8;font-size:1.1rem;font-weight:700;">#{mem['rank']}</div>
+                  </div>
+                </div>
+                <div style="margin-top:8px;color:#5A5D6A;font-size:0.72rem;">As of: {mem['snapshot']}</div>
+                """
+
             st.markdown(f"""
             <div class="profile-hero">
-              <div style="display:flex;align-items:center;gap:20px;">
+              <div style="display:flex;align-items:flex-start;gap:22px;">
                 {avatar_html}
-                <div>
+                <div style="flex:1;">
                   <p class="{name_class}">{profile['player_name']} {former_tag}</p>
+                  {mem_html}
                 </div>
               </div>
             </div>
@@ -614,8 +667,8 @@ elif page == "📥 Data Import":
         st.session_state.import_authenticated = False
         st.rerun()
 
-    tab_gbg_imp, tab_qi_imp, tab_manage, tab_sample = st.tabs(
-        ["⚔️ Import GBG", "🌀 Import QI", "🗂️ Manage Seasons", "📄 Sample CSVs"]
+    tab_gbg_imp, tab_qi_imp, tab_mem_imp, tab_manage, tab_sample = st.tabs(
+        ["⚔️ Import GBG", "🌀 Import QI", "👥 Import Members", "🗂️ Manage Seasons", "📄 Sample CSVs"]
     )
 
     with tab_gbg_imp:
@@ -658,10 +711,36 @@ elif page == "📥 Data Import":
         elif qi_file:
             st.warning("Enter a season name first.")
 
+    with tab_mem_imp:
+        st.subheader("Import Guild Member Snapshot")
+        st.markdown(
+            "**Required columns:** `member_id`, `member`, `points`, `eraName`, `guildgoods`, `won_battles`  \n"
+            "Optional: `rank`, `eraID`"
+        )
+        mem_snapshot_name = st.text_input(
+            "Snapshot name", placeholder="e.g. 29 Jan - 09 Feb 2026", key="mem_snapshot_input",
+            help="Use the same date format as your GBG/QI seasons for consistent sorting"
+        )
+        mem_file = st.file_uploader("Upload Members CSV", type=["csv"], key="mem_upload")
+        if mem_file and mem_snapshot_name:
+            try:
+                df_preview = pd.read_csv(mem_file)
+                st.dataframe(df_preview.head(), use_container_width=True, hide_index=True)
+                if st.button("✅ Confirm Import", key="mem_confirm"):
+                    mem_file.seek(0)
+                    ok, msg = import_members(pd.read_csv(mem_file), mem_snapshot_name.strip())
+                    st.success(msg) if ok else st.error(msg)
+                    if ok:
+                        st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
+        elif mem_file:
+            st.warning("Enter a snapshot name first.")
+
     with tab_manage:
         st.subheader("Manage Imported Seasons")
         all_seas = get_all_seasons()
-        col_g, col_q = st.columns(2)
+        col_g, col_q, col_m = st.columns(3)
         with col_g:
             st.markdown("**GBG Seasons**")
             for s in all_seas.get("gbg", []):
@@ -682,15 +761,29 @@ elif page == "📥 Data Import":
                     st.rerun()
             if not all_seas.get("qi"):
                 st.info("None imported.")
+        with col_m:
+            st.markdown("**Member Snapshots**")
+            for s in all_seas.get("members", []):
+                c1, c2 = st.columns([3, 1])
+                c1.write(s)
+                if c2.button("🗑️", key=f"del_mem_{s}"):
+                    st.success(delete_season("members", s))
+                    st.rerun()
+            if not all_seas.get("members"):
+                st.info("None imported.")
 
     with tab_sample:
         st.subheader("Download Sample CSV Templates")
         gbg_sample = "Player_ID,Player,Negotiations,Fights,Total\n854681998,Zodman,0,7097,7097\n1234051,Devils Deciple.,0,5744,5744\n7954450,Bloody Pastor,116,5451,5683\n"
         qi_sample  = "Player_ID,Player,Actions,Progress\n705849,lasherbob,4262800,12150\n853267111,Kuniggsbog,3855900,11000\n854719004,soldier00,3843900,10950\n"
-        c1, c2 = st.columns(2)
+        mem_sample = "rank,member_id,member,points,eraID,eraName,guildgoods,won_battles\n1,705849,lasherbob,9073312254,23,SASH,40000,1001205\n2,2277993,Crusaderx,8203612815,23,SASH,27040,1377990\n3,10593569,Badvok the Bold,7465202419,23,SASH,31400,914082\n"
+        c1, c2, c3 = st.columns(3)
         with c1:
             st.download_button("⬇️ GBG Template", gbg_sample, "gbg_template.csv", "text/csv")
             st.code(gbg_sample)
         with c2:
             st.download_button("⬇️ QI Template", qi_sample, "qi_template.csv", "text/csv")
             st.code(qi_sample)
+        with c3:
+            st.download_button("⬇️ Members Template", mem_sample, "members_template.csv", "text/csv")
+            st.code(mem_sample)
