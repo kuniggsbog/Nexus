@@ -376,7 +376,7 @@ if page == "🏴 Dashboard":
         with col_l:
             st.markdown(f'<div class="section-title">{gbg_icon()} GBG Season Totals</div>', unsafe_allow_html=True)
             if not gbg_tots.empty:
-                st.plotly_chart(gbg_guild_trend(gbg_tots), use_container_width=True)
+                st.plotly_chart(gbg_guild_trend(gbg_tots), width="stretch")
                 gbg_tot_disp = hide_pid(gbg_tots).rename(columns={
                     "season":"Season","total_fights":"Fights",
                     "total_negotiations":"Negotiations","total_contribution":"Total","player_count":"Players"
@@ -405,7 +405,7 @@ if page == "🏴 Dashboard":
         with col_r:
             st.markdown(f'<div class="section-title">{qi_icon()} QI Season Totals</div>', unsafe_allow_html=True)
             if not qi_tots.empty:
-                st.plotly_chart(qi_guild_trend(qi_tots), use_container_width=True)
+                st.plotly_chart(qi_guild_trend(qi_tots), width="stretch")
                 qi_tot_disp = hide_pid(qi_tots).rename(columns={
                     "season":"Season","total_actions":"Actions","total_progress":"Progress","player_count":"Players"
                 })
@@ -773,13 +773,13 @@ if page == "🏴 Dashboard":
         with pt1:
             st.markdown('<div class="section-title">📈 Guild Points Trend</div>', unsafe_allow_html=True)
             if not members_df.empty:
-                st.plotly_chart(points_trend_chart(members_df), use_container_width=True)
+                st.plotly_chart(points_trend_chart(members_df), width="stretch")
             else:
                 st.info("No member snapshot data yet.")
         with pt2:
             st.markdown('<div class="section-title">🌍 Era Distribution</div>', unsafe_allow_html=True)
             if not members_df.empty:
-                st.plotly_chart(era_distribution_chart(members_df), use_container_width=True)
+                st.plotly_chart(era_distribution_chart(members_df), width="stretch")
             else:
                 st.info("No member snapshot data yet.")
 
@@ -788,7 +788,7 @@ if page == "🏴 Dashboard":
         # ── Activity heatmap ──────────────────────────────────────────────
         st.markdown('<div class="section-title">🗓️ Season Activity Heatmap (GBG Fights)</div>', unsafe_allow_html=True)
         if not gbg_df.empty:
-            st.plotly_chart(activity_heatmap(gbg_df), use_container_width=True)
+            st.plotly_chart(activity_heatmap(gbg_df), width="stretch")
         else:
             st.info("No GBG data yet.")
 
@@ -840,15 +840,15 @@ elif page == "⚔️ GBG":
             season_arg = None if sel_season == "Latest" else sel_season
             lb = hide_pid(gbg_leaderboard(gbg_df_curr, season=season_arg, sort_by=sort_col))
             if not lb.empty:
-                st.dataframe(lb, use_container_width=True)
+                st.dataframe(lb, width="stretch")
 
         with tab_charts:
             chart_season = st.selectbox("Season for charts", ["Latest"] + seasons_list, key="gbg_chart_season")
             ca = None if chart_season == "Latest" else chart_season
             top_n = st.slider("Show top N players", 5, 40, 20, key="gbg_topn")
-            st.plotly_chart(gbg_fights_leaderboard(gbg_df_curr, season=ca, top_n=top_n), use_container_width=True)
-            st.plotly_chart(gbg_total_contribution_chart(gbg_df_curr, season=ca, top_n=top_n), use_container_width=True)
-            st.plotly_chart(gbg_guild_trend(gbg_totals(gbg_df_curr)), use_container_width=True)
+            st.plotly_chart(gbg_fights_leaderboard(gbg_df_curr, season=ca, top_n=top_n), width="stretch")
+            st.plotly_chart(gbg_total_contribution_chart(gbg_df_curr, season=ca, top_n=top_n), width="stretch")
+            st.plotly_chart(gbg_guild_trend(gbg_totals(gbg_df_curr)), width="stretch")
 
         with tab_comp:
             comp = gbg_season_comparison(gbg_df_curr)
@@ -864,17 +864,17 @@ elif page == "⚔️ GBG":
                 display.columns = ["Player", s_prev, s_curr, "Change", "Change %"]
                 display["Change"]   = display["Change"].apply(lambda v: f"+{v:,}" if v >= 0 else f"{v:,}")
                 display["Change %"] = display["Change %"].apply(lambda v: f"+{v:.2f}%" if v >= 0 else f"{v:.2f}%")
-                st.dataframe(display.reset_index(drop=True), use_container_width=True, hide_index=True)
+                st.dataframe(display.reset_index(drop=True), width="stretch", hide_index=True)
                 st.plotly_chart(
                     comparison_waterfall(comp, comp_metric, f"GBG {comp_metric}: {s_curr} vs {s_prev}"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with tab_cumu:
             st.subheader("📦 Cumulative Fights (Current Players)")
             cumu = hide_pid(get_cumulative_fights(gbg_df_curr))
             if not cumu.empty:
-                st.dataframe(cumu.reset_index(drop=True), use_container_width=True, hide_index=True)
+                st.dataframe(cumu.reset_index(drop=True), width="stretch", hide_index=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -904,14 +904,14 @@ elif page == "🌀 QI":
             qi_season_arg = None if qi_sel == "Latest" else qi_sel
             qi_lb = hide_pid(qi_leaderboard(qi_df_curr, season=qi_season_arg, sort_by=qi_sort))
             if not qi_lb.empty:
-                st.dataframe(qi_lb, use_container_width=True)
+                st.dataframe(qi_lb, width="stretch")
 
         with tab_charts:
             qi_chart_s = st.selectbox("Season for charts", ["Latest"] + qi_seasons_list, key="qi_chart_season")
             qi_ca = None if qi_chart_s == "Latest" else qi_chart_s
             qi_top_n = st.slider("Show top N players", 5, 40, 20, key="qi_topn")
-            st.plotly_chart(qi_progress_leaderboard(qi_df_curr, season=qi_ca, top_n=qi_top_n), use_container_width=True)
-            st.plotly_chart(qi_guild_trend(qi_totals(qi_df_curr)), use_container_width=True)
+            st.plotly_chart(qi_progress_leaderboard(qi_df_curr, season=qi_ca, top_n=qi_top_n), width="stretch")
+            st.plotly_chart(qi_guild_trend(qi_totals(qi_df_curr)), width="stretch")
 
         with tab_comp:
             qi_comp = qi_season_comparison(qi_df_curr)
@@ -927,17 +927,17 @@ elif page == "🌀 QI":
                 qi_display.columns = ["Player", qi_s_prev, qi_s_curr, "Change", "Change %"]
                 qi_display["Change"]   = qi_display["Change"].apply(lambda v: f"+{v:,}" if v >= 0 else f"{v:,}")
                 qi_display["Change %"] = qi_display["Change %"].apply(lambda v: f"+{v:.2f}%" if v >= 0 else f"{v:.2f}%")
-                st.dataframe(qi_display.reset_index(drop=True), use_container_width=True, hide_index=True)
+                st.dataframe(qi_display.reset_index(drop=True), width="stretch", hide_index=True)
                 st.plotly_chart(
                     comparison_waterfall(qi_comp, qi_comp_metric, f"QI {qi_comp_metric}: {qi_s_curr} vs {qi_s_prev}"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with tab_cumu:
             st.subheader("📦 Cumulative Progress (Current Players)")
             qi_cumu = hide_pid(get_cumulative_progress(qi_df_curr))
             if not qi_cumu.empty:
-                st.dataframe(qi_cumu.reset_index(drop=True), use_container_width=True, hide_index=True)
+                st.dataframe(qi_cumu.reset_index(drop=True), width="stretch", hide_index=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1187,9 +1187,9 @@ elif page == "👤 Player Profiles":
                     st.markdown('<div class="section-title">Season History</div>', unsafe_allow_html=True)
                     st.dataframe(
                         hide_pid(gbg_hist)[["season", "Fights", "Negotiations", "Total"]].set_index("season"),
-                        use_container_width=True,
+                        width="stretch",
                     )
-                    st.plotly_chart(gbg_player_trend(gbg_hist, profile["player_name"]), use_container_width=True)
+                    st.plotly_chart(gbg_player_trend(gbg_hist, profile["player_name"]), width="stretch")
 
             with tab_qi_p:
                 qi_hist = profile["qi_history"]
@@ -1216,9 +1216,9 @@ elif page == "👤 Player Profiles":
                     st.markdown('<div class="section-title">Season History</div>', unsafe_allow_html=True)
                     st.dataframe(
                         hide_pid(qi_hist)[["season", "Actions", "Progress"]].set_index("season"),
-                        use_container_width=True,
+                        width="stretch",
                     )
-                    st.plotly_chart(qi_player_trend(qi_hist, profile["player_name"]), use_container_width=True)
+                    st.plotly_chart(qi_player_trend(qi_hist, profile["player_name"]), width="stretch")
 
             st.markdown("---")
 
@@ -1260,7 +1260,7 @@ elif page == "📥 Data Import":
         if gbg_file and gbg_season_name:
             try:
                 df_preview = pd.read_csv(gbg_file)
-                st.dataframe(df_preview.head(), use_container_width=True, hide_index=True)
+                st.dataframe(df_preview.head(), width="stretch", hide_index=True)
                 if st.button("✅ Confirm Import", key="gbg_confirm"):
                     gbg_file.seek(0)
                     ok, msg = import_gbg(pd.read_csv(gbg_file), gbg_season_name.strip())
@@ -1280,7 +1280,7 @@ elif page == "📥 Data Import":
         if qi_file and qi_season_name:
             try:
                 df_preview = pd.read_csv(qi_file)
-                st.dataframe(df_preview.head(), use_container_width=True, hide_index=True)
+                st.dataframe(df_preview.head(), width="stretch", hide_index=True)
                 if st.button("✅ Confirm Import", key="qi_confirm"):
                     qi_file.seek(0)
                     ok, msg = import_qi(pd.read_csv(qi_file), qi_season_name.strip())
@@ -1306,7 +1306,7 @@ elif page == "📥 Data Import":
         if mem_file and mem_snapshot_name:
             try:
                 df_preview = pd.read_csv(mem_file)
-                st.dataframe(df_preview.head(), use_container_width=True, hide_index=True)
+                st.dataframe(df_preview.head(), width="stretch", hide_index=True)
                 if st.button("✅ Confirm Import", key="mem_confirm"):
                     mem_file.seek(0)
                     ok, msg = import_members(pd.read_csv(mem_file), mem_snapshot_name.strip())

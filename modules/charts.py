@@ -295,7 +295,7 @@ def era_distribution_chart(members_df: pd.DataFrame) -> go.Figure:
         textfont=dict(size=12),
     ))
     fig.update_layout(
-        **LAYOUT_BASE,
+        **{k: v for k, v in LAYOUT_BASE.items() if k != "margin"},
         title=dict(text="🌍 Player Era Distribution", font=dict(size=16)),
         height=360,
         showlegend=True,
