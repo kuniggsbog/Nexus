@@ -1107,22 +1107,67 @@ elif page == "👤 Player Profiles":
     if current_players.empty and former_players.empty:
         st.info("No player data found. Import seasons first.")
     else:
-        # Pre-fill search if jumped from sidebar
+        # ── Smart filter bar ─────────────────────────────────────────────
+        import string as _string
+
+        # Status filter
+        _status_opts = ["All", "Current", "Former"]
+        _status = st.radio("Show", _status_opts, horizontal=True,
+                           key="pp_status", label_visibility="collapsed")
+
+        # Letter filter row
+        _all_letters = list(_string.ascii_uppercase)
+        _letter_cols = st.columns(len(_all_letters) + 1)
+        if "pp_letter" not in st.session_state:
+            st.session_state["pp_letter"] = "All"
+
+        # Build all-players list to know which letters have players
+        _all_names = pd.concat([current_players, former_players], ignore_index=True)["Player"].dropna().str.upper()
+        _active_letters = set(_all_names.str[0].dropna().unique())
+
+        with _letter_cols[0]:
+            if st.button("All", key="ltr_all",
+                         type="primary" if st.session_state["pp_letter"] == "All" else "secondary"):
+                st.session_state["pp_letter"] = "All"
+                st.rerun()
+        for _li, _ltr in enumerate(_all_letters):
+            with _letter_cols[_li + 1]:
+                _has = _ltr in _active_letters
+                _is_sel = st.session_state["pp_letter"] == _ltr
+                if _has:
+                    if st.button(_ltr, key=f"ltr_{_ltr}",
+                                 type="primary" if _is_sel else "secondary"):
+                        st.session_state["pp_letter"] = _ltr
+                        st.rerun()
+                else:
+                    st.markdown(
+                        f'<div style="color:#3A3D4A;text-align:center;font-size:0.75rem;'
+                        f'padding:6px 0;user-select:none;">{_ltr}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+        _sel_letter = st.session_state["pp_letter"]
+
+        # Name search (still available for typing)
         default_search = _jump_name if _jump_name else ""
-        search = st.text_input("🔍 Search players...", value=default_search, placeholder="Type a name...")
+        search = st.text_input("🔍 Search by name", value=default_search,
+                               placeholder="Type a name...", label_visibility="collapsed")
 
         def filter_players(df):
-            if not search:
-                return df
-            return df[df["Player"].str.contains(search, case=False, na=False)]
+            result = df.copy()
+            if search:
+                result = result[result["Player"].str.contains(search, case=False, na=False)]
+            if _sel_letter != "All":
+                result = result[result["Player"].str.upper().str.startswith(_sel_letter, na=False)]
+            return result
 
-        curr_filtered   = filter_players(current_players)
-        former_filtered = filter_players(former_players)
+        curr_filtered   = filter_players(current_players) if _status != "Former" else pd.DataFrame()
+        former_filtered = filter_players(former_players)  if _status != "Current" else pd.DataFrame()
 
         def render_player_grid(df, is_former=False):
             if df.empty:
                 return
-            cols_per_row = 3
+            cols_per_row = 2
             for i in range(0, len(df), cols_per_row):
                 row_df = df.iloc[i:i+cols_per_row]
                 cols = st.columns(cols_per_row)
@@ -1135,12 +1180,11 @@ elif page == "👤 Player Profiles":
                         if has_gbg: badges += '<span class="badge-gbg">GBG</span> '
                         if has_qi:  badges += '<span class="badge-qi">QI</span>'
 
-                        avatar_html = get_avatar_html(prow["Player"], size=56)
+                        avatar_html = get_avatar_html(prow["Player"], size=64)
                         name_class  = "player-name-former" if is_former else "player-name"
                         card_class  = "player-card-former" if is_former else "player-card"
                         former_tag  = '<span class="former-badge">LEFT GUILD</span>' if is_former else ""
 
-                        # Member stats for card — pre-format to avoid f-string conflicts
                         mem = get_latest_member_stats(members_df, pid)
                         stats_html = ""
                         if mem:
@@ -1149,33 +1193,32 @@ elif page == "👤 Player Profiles":
                             wb   = f"{mem['won_battles']:,}"
                             gg   = f"{mem['guildgoods']:,}"
                             stats_html = (
-                                f'<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">'
-                                f'<span style="color:#FFD700;font-size:0.8rem;font-weight:700;">🏅 {pts}</span>'
-                                f'<span style="color:#8A8D9A;font-size:0.78rem;">· {era}</span>'
+                                f'<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;">'
+                                f'<span style="color:#FFD700;font-size:0.92rem;font-weight:700;">🏅 {pts}</span>'
+                                f'<span style="color:#8A8D9A;font-size:0.88rem;">· {era}</span>'
                                 f'</div>'
-                                f'<div style="margin-top:4px;display:flex;gap:12px;">'
-                                f'<span style="color:#2ECC71;font-size:0.75rem;">⚔️ {wb} battles</span>'
-                                f'<span style="color:#4A90D9;font-size:0.75rem;">📦 {gg} goods</span>'
+                                f'<div style="margin-top:5px;display:flex;gap:16px;">'
+                                f'<span style="color:#2ECC71;font-size:0.85rem;">⚔️ {wb} battles</span>'
+                                f'<span style="color:#4A90D9;font-size:0.85rem;">📦 {gg} goods</span>'
                                 f'</div>'
                             )
 
-                        # Medal / round wins
                         wins_row = wins_df[wins_df["Player_ID"] == pid] if not wins_df.empty else pd.DataFrame()
                         gbg_wins = int(wins_row["gbg_wins"].iloc[0]) if not wins_row.empty else 0
                         qi_wins  = int(wins_row["qi_wins"].iloc[0])  if not wins_row.empty else 0
                         medals = ""
                         if gbg_wins > 0:
-                            medals += f'<span style="color:#FFD700;font-size:0.75rem;font-weight:700;margin-left:6px;">🥇{gbg_wins}× GBG</span>'
+                            medals += f'<span style="color:#FFD700;font-size:0.82rem;font-weight:700;margin-left:8px;">🥇{gbg_wins}× GBG</span>'
                         if qi_wins > 0:
-                            medals += f'<span style="color:#C0C0C0;font-size:0.75rem;font-weight:700;margin-left:6px;">🥇{qi_wins}× QI</span>'
+                            medals += f'<span style="color:#C0C0C0;font-size:0.82rem;font-weight:700;margin-left:6px;">🥇{qi_wins}× QI</span>'
 
                         st.markdown(f"""
                         <div class="{card_class}">
-                          <div style="display:flex;align-items:flex-start;gap:14px;">
+                          <div style="display:flex;align-items:flex-start;gap:16px;">
                             {avatar_html}
                             <div style="flex:1;min-width:0;">
-                              <div class="{name_class}">{prow['Player']}{former_tag}{medals}</div>
-                              <div style="margin-top:4px;">{badges}</div>
+                              <div class="{name_class}" style="font-size:1.12rem;">{prow['Player']}{former_tag}{medals}</div>
+                              <div style="margin-top:5px;">{badges}</div>
                               {stats_html}
                             </div>
                           </div>
