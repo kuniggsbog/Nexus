@@ -221,11 +221,13 @@ def get_player_profile(player_id: str, gbg_df: pd.DataFrame, qi_df: pd.DataFrame
 
 def get_most_consistent_players(gbg_df: pd.DataFrame, qi_df: pd.DataFrame, section: str = "GBG") -> pd.DataFrame:
     """
-    Rank players by average contribution per season, descending.
-    GBG: average Fights per season
-    QI:  average Progress per season
-    Shows: Player | Seasons | Total | Avg per Season
+    Rank players by a veteran-weighted score: avg_per_season × log(seasons).
+    This rewards consistency over time — a new player with a huge average
+    won't outrank a veteran who has delivered solid numbers across many seasons.
+    Shows: # | Player | Seasons | Avg/Season | Score (sorted desc)
     """
+    import math
+
     df     = gbg_df if section == "GBG" else qi_df
     metric = "Fights" if section == "GBG" else "Progress"
     label  = "Avg Fights / Season" if section == "GBG" else "Avg Progress / Season"
@@ -239,15 +241,20 @@ def get_most_consistent_players(gbg_df: pd.DataFrame, qi_df: pd.DataFrame, secti
         .reset_index()
     )
     grouped["avg_per_season"] = (grouped["total"] / grouped["seasons"]).round(0).astype(int)
-    grouped = grouped.sort_values("avg_per_season", ascending=False).head(10).reset_index(drop=True)
-    grouped.index = grouped.index + 1
+    # Veteran score: avg × ln(seasons)  — minimum 1 season guard
+    grouped["score"] = grouped.apply(
+        lambda r: r["avg_per_season"] * math.log(max(r["seasons"], 1)), axis=1
+    ).round(0).astype(int)
 
-    # Format numbers with commas for readability
-    grouped["total"]         = grouped["total"].apply(lambda v: f"{v:,}")
+    grouped = grouped.sort_values("score", ascending=False).head(10).reset_index(drop=True)
+    grouped.index = grouped.index + 1  # 1-based rank
+
+    # Format with commas
     grouped["avg_per_season"] = grouped["avg_per_season"].apply(lambda v: f"{v:,}")
+    grouped["score"]          = grouped["score"].apply(lambda v: f"{v:,}")
 
-    return grouped[["Player", "seasons", "total", "avg_per_season"]].rename(columns={
+    return grouped[["Player", "seasons", "avg_per_season", "score"]].rename(columns={
         "seasons":        "Seasons",
-        "total":          f"Total {metric}",
         "avg_per_season": label,
+        "score":          "⭐ Score",
     })
