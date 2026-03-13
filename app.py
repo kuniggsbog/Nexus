@@ -281,6 +281,23 @@ if page == "🏴 Overview":
                 st.dataframe(top_qi.reset_index(drop=True), use_container_width=True, hide_index=True)
 
         st.markdown("---")
+        avg1, avg2 = st.columns(2)
+        with avg1:
+            st.markdown(f'<div class="section-title">{gbg_icon()} Top 10 Avg Fights / Season (GBG)</div>', unsafe_allow_html=True)
+            cons_gbg = get_most_consistent_players(gbg_df, qi_df, "GBG")
+            if not cons_gbg.empty:
+                st.dataframe(cons_gbg, use_container_width=True, hide_index=False)
+            else:
+                st.info("No GBG data yet.")
+        with avg2:
+            st.markdown(f'<div class="section-title">{qi_icon()} Top 10 Avg Progress / Season (QI)</div>', unsafe_allow_html=True)
+            cons_qi = get_most_consistent_players(gbg_df, qi_df, "QI")
+            if not cons_qi.empty:
+                st.dataframe(cons_qi, use_container_width=True, hide_index=False)
+            else:
+                st.info("No QI data yet.")
+
+        st.markdown("---")
         st.markdown('<div class="section-title">📋 Player Status — Latest Season</div>', unsafe_allow_html=True)
         status_df = detect_player_status(gbg_df, qi_df)
         if not status_df.empty:
@@ -694,17 +711,6 @@ elif page == "👤 Player Profiles":
                     st.plotly_chart(qi_player_trend(qi_hist, profile["player_name"]), use_container_width=True)
 
             st.markdown("---")
-            mc1, mc2 = st.columns(2)
-            with mc1:
-                st.subheader("🏅 Most Consistent (GBG)")
-                cons = get_most_consistent_players(gbg_df, qi_df, "GBG")
-                if not cons.empty:
-                    st.dataframe(cons.head(10), use_container_width=True, hide_index=True)
-            with mc2:
-                st.subheader("🏅 Most Consistent (QI)")
-                cons_qi = get_most_consistent_players(gbg_df, qi_df, "QI")
-                if not cons_qi.empty:
-                    st.dataframe(cons_qi.head(10), use_container_width=True, hide_index=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════
