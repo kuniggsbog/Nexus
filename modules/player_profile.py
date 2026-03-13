@@ -91,6 +91,9 @@ def get_all_season_winners(gbg_df: pd.DataFrame, qi_df: pd.DataFrame) -> pd.Data
         {"Player_ID": pid, **vals} for pid, vals in rows.items()
     ])
     return result
+
+
+def get_all_players(gbg_df: pd.DataFrame, qi_df: pd.DataFrame, members_df: pd.DataFrame = None) -> dict:
     """
     Return current and former player lists.
     If members_df provided, current players are sorted by points descending.
