@@ -107,37 +107,9 @@ def get_avatar_html(player_name: str, size: int = 56) -> str:
 # ── CSS ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-/* ── Main area: white background, dark text ── */
-[data-testid="stAppViewContainer"] > .main { background: #FFFFFF; }
-[data-testid="stAppViewContainer"] { background: #FFFFFF; }
+[data-testid="stAppViewContainer"] { background: #0E1117; }
+[data-testid="stSidebar"] { background: #12151E; border-right: 1px solid #2A2D3A; }
 
-/* ── Sidebar: always dark regardless of theme ── */
-[data-testid="stSidebar"] {
-    background: #12151E !important;
-    border-right: 1px solid #2A2D3A;
-}
-[data-testid="stSidebar"] * { color: #E8E8E8 !important; }
-[data-testid="stSidebar"] .stRadio label { color: #E8E8E8 !important; }
-[data-testid="stSidebar"] .stSelectbox label,
-[data-testid="stSidebar"] .stSelectbox div[data-baseweb] { color: #E8E8E8 !important; }
-[data-testid="stSidebar"] [data-baseweb="select"] > div {
-    background: #1A1D27 !important;
-    border-color: #2A2D3A !important;
-    color: #E8E8E8 !important;
-}
-[data-testid="stSidebar"] hr { border-color: #2A2D3A !important; }
-
-/* ── Section titles readable on white ── */
-.section-title {
-    color:#4A90D9; font-size:1.05rem; font-weight:700;
-    border-left:3px solid #4A90D9; padding-left:10px; margin:18px 0 10px;
-}
-.former-section-header {
-    color:#E74C3C; font-size:1rem; font-weight:700; margin:28px 0 10px;
-    border-left:3px solid #E74C3C; padding-left:10px;
-}
-
-/* ── Cards stay dark ── */
 .metric-card {
     background: #1A1D27; border: 1px solid #2A2D3A;
     border-radius: 12px; padding: 18px 22px; margin-bottom: 12px;
@@ -173,6 +145,15 @@ st.markdown("""
 }
 .profile-name        { color:#E8E8E8; font-size:1.6rem; font-weight:800; margin:0; }
 .profile-name-former { color:#8A8D9A; font-size:1.6rem; font-weight:800; margin:0; }
+
+.section-title {
+    color:#4A90D9; font-size:1.05rem; font-weight:700;
+    border-left:3px solid #4A90D9; padding-left:10px; margin:18px 0 10px;
+}
+.former-section-header {
+    color:#E74C3C; font-size:1rem; font-weight:700; margin:28px 0 10px;
+    border-left:3px solid #E74C3C; padding-left:10px;
+}
 
 .pill-new       { background:#1A3A1A; color:#2ECC71; padding:2px 10px; border-radius:20px; font-size:0.75rem; }
 .pill-returning { background:#3A2A1A; color:#F39C12; padding:2px 10px; border-radius:20px; font-size:0.75rem; }
