@@ -153,12 +153,34 @@ def get_player_profile(player_id: str, gbg_df: pd.DataFrame, qi_df: pd.DataFrame
 
 
 def get_most_consistent_players(gbg_df: pd.DataFrame, qi_df: pd.DataFrame, section: str = "GBG") -> pd.DataFrame:
-    df = gbg_df if section == "GBG" else qi_df
-    if df.empty:
+    """
+    Rank players by average contribution per season, descending.
+    GBG: average Fights per season
+    QI:  average Progress per season
+    Shows: Player | Seasons | Total | Avg per Season
+    """
+    df     = gbg_df if section == "GBG" else qi_df
+    metric = "Fights" if section == "GBG" else "Progress"
+    label  = "Avg Fights / Season" if section == "GBG" else "Avg Progress / Season"
+
+    if df.empty or metric not in df.columns:
         return pd.DataFrame()
-    counts = (df.groupby(["Player_ID", "Player"])["season"]
-                .nunique()
-                .reset_index()
-                .rename(columns={"season": "seasons_active"})
-                .sort_values("seasons_active", ascending=False))
-    return counts[["Player", "seasons_active"]]
+
+    grouped = (
+        df.groupby(["Player_ID", "Player"])[metric]
+        .agg(seasons="count", total="sum")
+        .reset_index()
+    )
+    grouped["avg_per_season"] = (grouped["total"] / grouped["seasons"]).round(0).astype(int)
+    grouped = grouped.sort_values("avg_per_season", ascending=False).head(10).reset_index(drop=True)
+    grouped.index = grouped.index + 1
+
+    # Format numbers with commas for readability
+    grouped["total"]         = grouped["total"].apply(lambda v: f"{v:,}")
+    grouped["avg_per_season"] = grouped["avg_per_season"].apply(lambda v: f"{v:,}")
+
+    return grouped[["Player", "seasons", "total", "avg_per_season"]].rename(columns={
+        "seasons":        "Seasons",
+        "total":          f"Total {metric}",
+        "avg_per_season": label,
+    })
