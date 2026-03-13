@@ -269,11 +269,14 @@ def points_trend_chart(members_df: pd.DataFrame) -> go.Figure:
         fill="tozeroy", fillcolor="rgba(255,215,0,0.08)",
     ))
     fig.update_layout(
-        **LAYOUT_BASE,
+        paper_bgcolor=BG, plot_bgcolor=CARD,
+        font=dict(color=TEXT, family="Inter, sans-serif"),
+        margin=dict(l=40, r=20, t=50, b=40),
+        xaxis=dict(gridcolor="#2A2D3A", linecolor="#2A2D3A"),
+        yaxis=dict(gridcolor="#2A2D3A", linecolor="#2A2D3A", tickformat=".2s"),
         title=dict(text="📈 Guild Total Points Over Time", font=dict(size=16)),
         height=360,
     )
-    fig.update_yaxes(tickformat=".2s")
     return fig
 
 
@@ -295,12 +298,13 @@ def era_distribution_chart(members_df: pd.DataFrame) -> go.Figure:
         textfont=dict(size=12),
     ))
     fig.update_layout(
-        **{k: v for k, v in LAYOUT_BASE.items() if k != "margin"},
+        paper_bgcolor=BG, plot_bgcolor=CARD,
+        font=dict(color=TEXT, family="Inter, sans-serif"),
+        margin=dict(l=20, r=20, t=50, b=20),
         title=dict(text="🌍 Player Era Distribution", font=dict(size=16)),
         height=360,
         showlegend=True,
         legend=dict(bgcolor=CARD, bordercolor="#2A2D3A", font=dict(size=11)),
-        margin=dict(l=20, r=20, t=50, b=20),
     )
     return fig
 
@@ -311,17 +315,13 @@ def activity_heatmap(gbg_df: pd.DataFrame) -> go.Figure:
         return go.Figure()
     from modules.comparisons import sort_seasons
     seasons = sort_seasons(gbg_df["season"].unique().tolist())
-    # Only current players (in latest season)
     latest_pids = set(gbg_df[gbg_df["season"] == seasons[-1]]["Player_ID"].astype(str))
     df = gbg_df[gbg_df["Player_ID"].astype(str).isin(latest_pids)].copy()
 
-    # Pivot: players as rows, seasons as columns
     pivot = df.pivot_table(index="Player", columns="season", values="Fights", aggfunc="sum", fill_value=0)
     pivot = pivot.reindex(columns=seasons, fill_value=0)
-    # Sort players by total fights descending
     pivot = pivot.loc[pivot.sum(axis=1).sort_values(ascending=False).index]
 
-    import numpy as np
     z    = pivot.values.tolist()
     text = [[f"{int(v):,}" if v > 0 else "—" for v in row] for row in pivot.values]
 
@@ -338,11 +338,12 @@ def activity_heatmap(gbg_df: pd.DataFrame) -> go.Figure:
         xgap=3, ygap=3,
     ))
     fig.update_layout(
-        **{k: v for k, v in LAYOUT_BASE.items() if k not in ("margin", "xaxis", "yaxis")},
+        paper_bgcolor=BG, plot_bgcolor=CARD,
+        font=dict(color=TEXT, family="Inter, sans-serif"),
         title=dict(text="🗓️ Player Activity Heatmap (GBG Fights)", font=dict(size=16)),
         height=max(300, len(pivot) * 28 + 80),
-        xaxis=dict(side="top", tickangle=-30, gridcolor="transparent"),
-        yaxis=dict(gridcolor="transparent"),
+        xaxis=dict(side="top", tickangle=-30, gridcolor="rgba(0,0,0,0)", linecolor="#2A2D3A"),
+        yaxis=dict(gridcolor="rgba(0,0,0,0)", linecolor="#2A2D3A"),
         margin=dict(l=120, r=20, t=80, b=20),
     )
     return fig
