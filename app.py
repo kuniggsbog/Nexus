@@ -32,6 +32,7 @@ from modules.player_profile import (
     get_all_players, get_player_profile, get_most_consistent_players,
     get_latest_member_stats, get_all_season_winners,
     get_hall_of_fame, get_guild_health, get_active_streak, get_newcomers, get_most_improved,
+    get_points_leaderboard, get_goods_leaderboard, get_battles_leaderboard,
 )
 from modules.comparisons import (
     gbg_season_comparison, qi_season_comparison,
@@ -40,6 +41,7 @@ from modules.comparisons import (
 from modules.charts import (
     gbg_fights_leaderboard, gbg_total_contribution_chart, gbg_guild_trend, gbg_player_trend,
     qi_progress_leaderboard, qi_guild_trend, qi_player_trend, comparison_waterfall,
+    points_trend_chart, era_distribution_chart, activity_heatmap,
 )
 
 # ── Constants ──────────────────────────────────────────────────────────────
@@ -189,16 +191,57 @@ with st.sidebar:
     st.markdown("---")
     page = st.radio(
         "Navigate",
-        ["🏴 Dashboard", "GBG", "QI", "👤 Player Profiles", "📥 Data Import"],
+        ["🏴 Dashboard", "⚔️ GBG", "🌀 QI", "👤 Player Profiles", "📥 Data Import"],
         label_visibility="collapsed",
         format_func=lambda x: x,
     )
     st.markdown("---")
+
+    # ── Last updated indicator ────────────────────────────────────────────
     seasons = get_all_seasons()
-    if seasons["gbg"]:
-        st.markdown(f"**GBG:** {', '.join(sort_seasons(seasons['gbg'], descending=True))}")
-    if seasons["qi"]:
-        st.markdown(f"**QI:** {', '.join(sort_seasons(seasons['qi'], descending=True))}")
+    all_season_names = (
+        sort_seasons(seasons["gbg"], descending=True)[:1] +
+        sort_seasons(seasons["qi"], descending=True)[:1]
+    )
+    if all_season_names:
+        st.markdown(
+            f'<div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;'
+            f'letter-spacing:1px;margin-bottom:4px;">Latest Data</div>',
+            unsafe_allow_html=True,
+        )
+        if seasons["gbg"]:
+            st.markdown(
+                f'<div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:8px;'
+                f'padding:8px 10px;margin-bottom:4px;font-size:0.78rem;">'
+                f'⚔️ <b>{sort_seasons(seasons["gbg"], descending=True)[0]}</b></div>',
+                unsafe_allow_html=True,
+            )
+        if seasons["qi"]:
+            st.markdown(
+                f'<div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:8px;'
+                f'padding:8px 10px;margin-bottom:4px;font-size:0.78rem;">'
+                f'🌀 <b>{sort_seasons(seasons["qi"], descending=True)[0]}</b></div>',
+                unsafe_allow_html=True,
+            )
+        st.markdown("---")
+
+    # ── Player quick-jump ─────────────────────────────────────────────────
+    _gbg_tmp     = get_gbg_df()
+    _qi_tmp      = get_qi_df()
+    _members_tmp = get_members_df()
+    _all_players = get_all_players(_gbg_tmp, _qi_tmp, _members_tmp)
+    _current     = _all_players.get("current", pd.DataFrame())
+    if not _current.empty and "Player" in _current.columns:
+        st.markdown(
+            f'<div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;'
+            f'letter-spacing:1px;margin-bottom:6px;">Quick Jump to Player</div>',
+            unsafe_allow_html=True,
+        )
+        _player_names = ["—"] + sorted(_current["Player"].dropna().tolist())
+        _jump = st.selectbox("Player", _player_names, label_visibility="collapsed", key="sidebar_jump")
+        if _jump != "—":
+            st.session_state["profile_jump"] = _jump
+            st.session_state["force_profiles"] = True
 
 
 # ── Patch radio labels to include icons ───────────────────────────────────
@@ -650,6 +693,83 @@ if page == "🏴 Dashboard":
 
         st.markdown("---")
 
+        # ── Member leaderboards (Points / Goods / Battles) ────────────────
+        ml1, ml2, ml3 = st.columns(3)
+
+        def _leaderboard_cards(title, icon, data, value_key, value_label, value_color, sub_key=None):
+            st.markdown(f'<div class="section-title">{icon} {title}</div>', unsafe_allow_html=True)
+            if not data:
+                st.info("No member data yet.")
+                return
+            medal_map = {0:"🥇", 1:"🥈", 2:"🥉"}
+            max_val   = data[0][value_key] if data else 1
+            for i, row in enumerate(data):
+                medal   = medal_map.get(i, f"#{i+1}")
+                bar_pct = int(row[value_key] / max(max_val, 1) * 100)
+                bar_col = "#FFD700" if i==0 else "#C0C0C0" if i==1 else "#CD7F32" if i==2 else value_color
+                val_str = f"{row[value_key]:,}"
+                sub_str = row.get(sub_key, "") if sub_key else ""
+                st.markdown(f"""
+                <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                            padding:10px 14px;margin-bottom:6px;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <span style="font-size:1rem;">{medal}</span>
+                      <div>
+                        <div style="color:#E8E8E8;font-weight:700;font-size:0.88rem;">{row['player']}</div>
+                        {"<div style='color:#8A8D9A;font-size:0.7rem;'>"+sub_str+"</div>" if sub_str else ""}
+                      </div>
+                    </div>
+                    <div style="text-align:right;">
+                      <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">{value_label}</div>
+                      <div style="color:{value_color};font-weight:800;font-size:0.9rem;">{val_str}</div>
+                    </div>
+                  </div>
+                  <div style="background:#0E1117;border-radius:4px;height:3px;margin-top:7px;">
+                    <div style="background:{bar_col};width:{bar_pct}%;height:3px;border-radius:4px;"></div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
+
+        with ml1:
+            pts_data = get_points_leaderboard(members_df, gbg_df, qi_df)
+            _leaderboard_cards("Top Points", "🏅", pts_data, "points", "Points", "#FFD700", "eraName")
+
+        with ml2:
+            goods_data = get_goods_leaderboard(members_df, gbg_df, qi_df)
+            _leaderboard_cards("Top Guild Goods Daily", "📦", goods_data, "guildgoods", "Goods/Day", "#4A90D9", "eraName")
+
+        with ml3:
+            battles_data = get_battles_leaderboard(members_df, gbg_df, qi_df)
+            _leaderboard_cards("Top Won Battles", "⚔️", battles_data, "won_battles", "Won Battles", "#2ECC71", "eraName")
+
+        st.markdown("---")
+
+        # ── Points trend + Era distribution ──────────────────────────────
+        pt1, pt2 = st.columns(2)
+        with pt1:
+            st.markdown('<div class="section-title">📈 Guild Points Trend</div>', unsafe_allow_html=True)
+            if not members_df.empty:
+                st.plotly_chart(points_trend_chart(members_df), use_container_width=True)
+            else:
+                st.info("No member snapshot data yet.")
+        with pt2:
+            st.markdown('<div class="section-title">🌍 Era Distribution</div>', unsafe_allow_html=True)
+            if not members_df.empty:
+                st.plotly_chart(era_distribution_chart(members_df), use_container_width=True)
+            else:
+                st.info("No member snapshot data yet.")
+
+        st.markdown("---")
+
+        # ── Activity heatmap ──────────────────────────────────────────────
+        st.markdown('<div class="section-title">🗓️ Season Activity Heatmap (GBG Fights)</div>', unsafe_allow_html=True)
+        if not gbg_df.empty:
+            st.plotly_chart(activity_heatmap(gbg_df), use_container_width=True)
+        else:
+            st.info("No GBG data yet.")
+
+        st.markdown("---")
+
         # ── Player status ─────────────────────────────────────────────────
         st.markdown('<div class="section-title">📋 Player Status — Latest Season</div>', unsafe_allow_html=True)
         status_df = detect_player_status(gbg_df, qi_df)
@@ -672,7 +792,7 @@ if page == "🏴 Dashboard":
 # ══════════════════════════════════════════════════════════════════════════
 # PAGE: GBG
 # ══════════════════════════════════════════════════════════════════════════
-elif page == "GBG":
+elif page == "⚔️ GBG":
     st.markdown(f'<h1>{gbg_icon(32)} Guild Battlegrounds (GBG)</h1>', unsafe_allow_html=True)
 
     if gbg_df.empty:
@@ -689,7 +809,6 @@ elif page == "GBG":
                 sel_season = st.selectbox("Season", ["Latest"] + seasons_list, key="gbg_lb_season")
             with col_sort:
                 sort_col = st.selectbox("Sort by", ["Total", "Fights", "Negotiations"], key="gbg_sort")
-
             season_arg = None if sel_season == "Latest" else sel_season
             lb = hide_pid(gbg_leaderboard(gbg_df, season=season_arg, sort_by=sort_col))
             if not lb.empty:
@@ -733,7 +852,7 @@ elif page == "GBG":
 # ══════════════════════════════════════════════════════════════════════════
 # PAGE: QI
 # ══════════════════════════════════════════════════════════════════════════
-elif page == "QI":
+elif page == "🌀 QI":
     st.markdown(f'<h1>{qi_icon(32)} Quantum Incursions (QI)</h1>', unsafe_allow_html=True)
 
     if qi_df.empty:
@@ -795,6 +914,10 @@ elif page == "QI":
 elif page == "👤 Player Profiles":
     st.title("👤 Player Profiles")
 
+    # Handle sidebar quick-jump
+    _jump_name = st.session_state.pop("profile_jump", None)
+    st.session_state.pop("force_profiles", None)
+
     players = get_all_players(gbg_df, qi_df, members_df)
     current_players = players["current"]
     former_players  = players["former"]
@@ -802,7 +925,9 @@ elif page == "👤 Player Profiles":
     if current_players.empty and former_players.empty:
         st.info("No player data found. Import seasons first.")
     else:
-        search = st.text_input("🔍 Search players...", placeholder="Type a name...")
+        # Pre-fill search if jumped from sidebar
+        default_search = _jump_name if _jump_name else ""
+        search = st.text_input("🔍 Search players...", value=default_search, placeholder="Type a name...")
 
         def filter_players(df):
             if not search:
