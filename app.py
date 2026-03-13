@@ -821,7 +821,42 @@ elif page == "⚔️ GBG":
             season_arg = None if sel_season == "Latest" else sel_season
             lb = hide_pid(gbg_leaderboard(gbg_df_curr, season=season_arg, sort_by=sort_col))
             if not lb.empty:
-                st.dataframe(lb, width="stretch")
+                medal_map = {0:"🥇", 1:"🥈", 2:"🥉"}
+                max_val = lb[sort_col].max() if sort_col in lb.columns else 1
+                for i, (_, row) in enumerate(lb.iterrows()):
+                    medal   = medal_map.get(i, f"#{i+1}")
+                    bar_pct = int(row.get(sort_col, 0) / max(max_val, 1) * 100)
+                    bar_col = "#FFD700" if i==0 else "#C0C0C0" if i==1 else "#CD7F32" if i==2 else "#4A90D9"
+                    fights  = f"{int(row.get('Fights', 0)):,}"
+                    negs    = f"{int(row.get('Negotiations', 0)):,}"
+                    total   = f"{int(row.get('Total', 0)):,}"
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                padding:12px 16px;margin-bottom:6px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                          <span style="font-size:1.1rem;min-width:28px;">{medal}</span>
+                          <span style="color:#E8E8E8;font-weight:700;font-size:0.95rem;">{row['Player']}</span>
+                        </div>
+                        <div style="display:flex;gap:20px;">
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Fights</div>
+                            <div style="color:#FFD700;font-weight:700;">{fights}</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Negs</div>
+                            <div style="color:#4A90D9;font-weight:700;">{negs}</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Total</div>
+                            <div style="color:#2ECC71;font-weight:700;">{total}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style="background:#0E1117;border-radius:4px;height:4px;margin-top:8px;">
+                        <div style="background:{bar_col};width:{bar_pct}%;height:4px;border-radius:4px;"></div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
 
         with tab_charts:
             chart_season = st.selectbox("Season for charts", ["Latest"] + seasons_list, key="gbg_chart_season")
@@ -838,24 +873,78 @@ elif page == "⚔️ GBG":
             else:
                 s_curr = comp["season_current"].iloc[0]
                 s_prev = comp["season_previous"].iloc[0]
-                st.markdown(f"### {s_curr} vs {s_prev}")
+                st.markdown(f'<div class="section-title">📊 {s_curr} vs {s_prev}</div>', unsafe_allow_html=True)
                 comp_metric = st.selectbox("Metric", ["Fights", "Negotiations", "Total"], key="gbg_comp_metric")
                 display = comp[["Player", f"{comp_metric}_previous", f"{comp_metric}_current",
                                 f"{comp_metric}_change", f"{comp_metric}_pct"]].copy()
-                display.columns = ["Player", s_prev, s_curr, "Change", "Change %"]
-                display["Change"]   = display["Change"].apply(lambda v: f"+{v:,}" if v >= 0 else f"{v:,}")
-                display["Change %"] = display["Change %"].apply(lambda v: f"+{v:.2f}%" if v >= 0 else f"{v:.2f}%")
-                st.dataframe(display.reset_index(drop=True), width="stretch", hide_index=True)
+                display.columns = ["Player", "prev", "curr", "delta", "pct"]
+                display = display.sort_values("curr", ascending=False).reset_index(drop=True)
+                max_curr = display["curr"].max() if not display.empty else 1
+                for i, (_, row) in enumerate(display.iterrows()):
+                    delta_v = int(row["delta"])
+                    pct_v   = float(row["pct"])
+                    sign    = "+" if delta_v >= 0 else ""
+                    d_col   = "#2ECC71" if delta_v >= 0 else "#E74C3C"
+                    bar_pct = int(row["curr"] / max(max_curr, 1) * 100)
+                    medal   = {0:"🥇",1:"🥈",2:"🥉"}.get(i, f"#{i+1}")
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                padding:12px 16px;margin-bottom:6px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                          <span style="font-size:1.0rem;min-width:28px;">{medal}</span>
+                          <span style="color:#E8E8E8;font-weight:700;font-size:0.95rem;">{row['Player']}</span>
+                        </div>
+                        <div style="display:flex;gap:20px;align-items:center;">
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">{s_prev}</div>
+                            <div style="color:#8A8D9A;font-weight:600;">{int(row['prev']):,}</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">{s_curr}</div>
+                            <div style="color:#FFD700;font-weight:700;">{int(row['curr']):,}</div>
+                          </div>
+                          <div style="text-align:right;min-width:80px;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Change</div>
+                            <div style="color:{d_col};font-weight:700;">{sign}{delta_v:,} ({sign}{pct_v:.1f}%)</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style="background:#0E1117;border-radius:4px;height:4px;margin-top:8px;">
+                        <div style="background:#4A90D9;width:{bar_pct}%;height:4px;border-radius:4px;"></div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
                 st.plotly_chart(
                     comparison_waterfall(comp, comp_metric, f"GBG {comp_metric}: {s_curr} vs {s_prev}"),
                     width="stretch",
                 )
 
         with tab_cumu:
-            st.subheader("📦 Cumulative Fights (Current Players)")
+            st.markdown('<div class="section-title">📦 Cumulative Fights (Current Players)</div>', unsafe_allow_html=True)
             cumu = hide_pid(get_cumulative_fights(gbg_df_curr))
             if not cumu.empty:
-                st.dataframe(cumu.reset_index(drop=True), width="stretch", hide_index=True)
+                max_cumu = cumu["cumulative_fights"].max() if "cumulative_fights" in cumu.columns else 1
+                for i, (_, row) in enumerate(cumu.iterrows()):
+                    bar_pct = int(row.get("cumulative_fights", 0) / max(max_cumu, 1) * 100)
+                    bar_col = "#FFD700" if i==0 else "#C0C0C0" if i==1 else "#CD7F32" if i==2 else "#4A90D9"
+                    medal   = {0:"🥇",1:"🥈",2:"🥉"}.get(i, f"#{i+1}")
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                padding:12px 16px;margin-bottom:6px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                          <span style="font-size:1.0rem;min-width:28px;">{medal}</span>
+                          <span style="color:#E8E8E8;font-weight:700;font-size:0.95rem;">{row['Player']}</span>
+                        </div>
+                        <div style="text-align:right;">
+                          <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">All-Time Fights</div>
+                          <div style="color:#FFD700;font-weight:800;font-size:1rem;">{int(row.get('cumulative_fights',0)):,}</div>
+                        </div>
+                      </div>
+                      <div style="background:#0E1117;border-radius:4px;height:4px;margin-top:8px;">
+                        <div style="background:{bar_col};width:{bar_pct}%;height:4px;border-radius:4px;"></div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -885,7 +974,37 @@ elif page == "🌀 QI":
             qi_season_arg = None if qi_sel == "Latest" else qi_sel
             qi_lb = hide_pid(qi_leaderboard(qi_df_curr, season=qi_season_arg, sort_by=qi_sort))
             if not qi_lb.empty:
-                st.dataframe(qi_lb, width="stretch")
+                medal_map = {0:"🥇", 1:"🥈", 2:"🥉"}
+                max_val = qi_lb[qi_sort].max() if qi_sort in qi_lb.columns else 1
+                for i, (_, row) in enumerate(qi_lb.iterrows()):
+                    medal   = medal_map.get(i, f"#{i+1}")
+                    bar_pct = int(row.get(qi_sort, 0) / max(max_val, 1) * 100)
+                    bar_col = "#FFD700" if i==0 else "#C0C0C0" if i==1 else "#CD7F32" if i==2 else "#9B59B6"
+                    prog    = f"{int(row.get('Progress', 0)):,}"
+                    acts    = f"{int(row.get('Actions', 0)):,}"
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                padding:12px 16px;margin-bottom:6px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                          <span style="font-size:1.1rem;min-width:28px;">{medal}</span>
+                          <span style="color:#E8E8E8;font-weight:700;font-size:0.95rem;">{row['Player']}</span>
+                        </div>
+                        <div style="display:flex;gap:20px;">
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Progress</div>
+                            <div style="color:#FFD700;font-weight:700;">{prog}</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Actions</div>
+                            <div style="color:#9B59B6;font-weight:700;">{acts}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style="background:#0E1117;border-radius:4px;height:4px;margin-top:8px;">
+                        <div style="background:{bar_col};width:{bar_pct}%;height:4px;border-radius:4px;"></div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
 
         with tab_charts:
             qi_chart_s = st.selectbox("Season for charts", ["Latest"] + qi_seasons_list, key="qi_chart_season")
@@ -901,24 +1020,78 @@ elif page == "🌀 QI":
             else:
                 qi_s_curr = qi_comp["season_current"].iloc[0]
                 qi_s_prev = qi_comp["season_previous"].iloc[0]
-                st.markdown(f"### {qi_s_curr} vs {qi_s_prev}")
+                st.markdown(f'<div class="section-title">📊 {qi_s_curr} vs {qi_s_prev}</div>', unsafe_allow_html=True)
                 qi_comp_metric = st.selectbox("Metric", ["Progress", "Actions"], key="qi_comp_metric")
                 qi_display = qi_comp[["Player", f"{qi_comp_metric}_previous", f"{qi_comp_metric}_current",
                                       f"{qi_comp_metric}_change", f"{qi_comp_metric}_pct"]].copy()
-                qi_display.columns = ["Player", qi_s_prev, qi_s_curr, "Change", "Change %"]
-                qi_display["Change"]   = qi_display["Change"].apply(lambda v: f"+{v:,}" if v >= 0 else f"{v:,}")
-                qi_display["Change %"] = qi_display["Change %"].apply(lambda v: f"+{v:.2f}%" if v >= 0 else f"{v:.2f}%")
-                st.dataframe(qi_display.reset_index(drop=True), width="stretch", hide_index=True)
+                qi_display.columns = ["Player", "prev", "curr", "delta", "pct"]
+                qi_display = qi_display.sort_values("curr", ascending=False).reset_index(drop=True)
+                max_curr = qi_display["curr"].max() if not qi_display.empty else 1
+                for i, (_, row) in enumerate(qi_display.iterrows()):
+                    delta_v = int(row["delta"])
+                    pct_v   = float(row["pct"])
+                    sign    = "+" if delta_v >= 0 else ""
+                    d_col   = "#2ECC71" if delta_v >= 0 else "#E74C3C"
+                    bar_pct = int(row["curr"] / max(max_curr, 1) * 100)
+                    medal   = {0:"🥇",1:"🥈",2:"🥉"}.get(i, f"#{i+1}")
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                padding:12px 16px;margin-bottom:6px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                          <span style="font-size:1.0rem;min-width:28px;">{medal}</span>
+                          <span style="color:#E8E8E8;font-weight:700;font-size:0.95rem;">{row['Player']}</span>
+                        </div>
+                        <div style="display:flex;gap:20px;align-items:center;">
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">{qi_s_prev}</div>
+                            <div style="color:#8A8D9A;font-weight:600;">{int(row['prev']):,}</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">{qi_s_curr}</div>
+                            <div style="color:#FFD700;font-weight:700;">{int(row['curr']):,}</div>
+                          </div>
+                          <div style="text-align:right;min-width:80px;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Change</div>
+                            <div style="color:{d_col};font-weight:700;">{sign}{delta_v:,} ({sign}{pct_v:.1f}%)</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style="background:#0E1117;border-radius:4px;height:4px;margin-top:8px;">
+                        <div style="background:#9B59B6;width:{bar_pct}%;height:4px;border-radius:4px;"></div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
                 st.plotly_chart(
                     comparison_waterfall(qi_comp, qi_comp_metric, f"QI {qi_comp_metric}: {qi_s_curr} vs {qi_s_prev}"),
                     width="stretch",
                 )
 
         with tab_cumu:
-            st.subheader("📦 Cumulative Progress (Current Players)")
+            st.markdown('<div class="section-title">📦 Cumulative Progress (Current Players)</div>', unsafe_allow_html=True)
             qi_cumu = hide_pid(get_cumulative_progress(qi_df_curr))
             if not qi_cumu.empty:
-                st.dataframe(qi_cumu.reset_index(drop=True), width="stretch", hide_index=True)
+                max_cumu = qi_cumu["cumulative_progress"].max() if "cumulative_progress" in qi_cumu.columns else 1
+                for i, (_, row) in enumerate(qi_cumu.iterrows()):
+                    bar_pct = int(row.get("cumulative_progress", 0) / max(max_cumu, 1) * 100)
+                    bar_col = "#FFD700" if i==0 else "#C0C0C0" if i==1 else "#CD7F32" if i==2 else "#9B59B6"
+                    medal   = {0:"🥇",1:"🥈",2:"🥉"}.get(i, f"#{i+1}")
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                padding:12px 16px;margin-bottom:6px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                          <span style="font-size:1.0rem;min-width:28px;">{medal}</span>
+                          <span style="color:#E8E8E8;font-weight:700;font-size:0.95rem;">{row['Player']}</span>
+                        </div>
+                        <div style="text-align:right;">
+                          <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">All-Time Progress</div>
+                          <div style="color:#FFD700;font-weight:800;font-size:1rem;">{int(row.get('cumulative_progress',0)):,}</div>
+                        </div>
+                      </div>
+                      <div style="background:#0E1117;border-radius:4px;height:4px;margin-top:8px;">
+                        <div style="background:{bar_col};width:{bar_pct}%;height:4px;border-radius:4px;"></div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════
