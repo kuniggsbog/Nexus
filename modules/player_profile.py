@@ -221,10 +221,8 @@ def get_player_profile(player_id: str, gbg_df: pd.DataFrame, qi_df: pd.DataFrame
 
 def get_most_consistent_players(gbg_df: pd.DataFrame, qi_df: pd.DataFrame, section: str = "GBG") -> pd.DataFrame:
     """
-    Rank players by a veteran-weighted score: avg_per_season × log(seasons).
-    This rewards consistency over time — a new player with a huge average
-    won't outrank a veteran who has delivered solid numbers across many seasons.
-    Shows: # | Player | Seasons | Avg/Season | Score (sorted desc)
+    Rank CURRENT players by veteran-weighted score: avg_per_season × log(seasons).
+    Former players (not in latest season of either GBG or QI) are excluded.
     """
     import math
 
@@ -235,21 +233,33 @@ def get_most_consistent_players(gbg_df: pd.DataFrame, qi_df: pd.DataFrame, secti
     if df.empty or metric not in df.columns:
         return pd.DataFrame()
 
+    # ── Build set of current player IDs (in latest season of either section) ──
+    current_pids = set()
+    for src in [gbg_df, qi_df]:
+        if not src.empty and "season" in src.columns:
+            seasons = sort_seasons(src["season"].unique().tolist())
+            latest  = seasons[-1]
+            pids    = src[src["season"] == latest]["Player_ID"].astype(str).tolist()
+            current_pids.update(pids)
+
+    # Filter df to current players only
+    df = df[df["Player_ID"].astype(str).isin(current_pids)]
+    if df.empty:
+        return pd.DataFrame()
+
     grouped = (
         df.groupby(["Player_ID", "Player"])[metric]
         .agg(seasons="count", total="sum")
         .reset_index()
     )
     grouped["avg_per_season"] = (grouped["total"] / grouped["seasons"]).round(0).astype(int)
-    # Veteran score: avg × ln(seasons)  — minimum 1 season guard
     grouped["score"] = grouped.apply(
         lambda r: r["avg_per_season"] * math.log(max(r["seasons"], 1)), axis=1
     ).round(0).astype(int)
 
     grouped = grouped.sort_values("score", ascending=False).head(10).reset_index(drop=True)
-    grouped.index = grouped.index + 1  # 1-based rank
+    grouped.index = grouped.index + 1
 
-    # Format with commas
     grouped["avg_per_season"] = grouped["avg_per_season"].apply(lambda v: f"{v:,}")
     grouped["score"]          = grouped["score"].apply(lambda v: f"{v:,}")
 
