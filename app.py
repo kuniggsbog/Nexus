@@ -189,7 +189,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.markdown("---")
-    _nav_default = ["🏴 Dashboard", "⚔️ GBG", "🌀 QI", "👤 Player Profiles", "📊 Metrics", "📥 Data Import"]
+    _nav_default = ["🏴 Dashboard", "⚔️ GBG", "🌀 QI", "👤 Player Profiles", "📊 Metrics", "🏆 Hall of Fame", "📥 Data Import"]
     page = st.radio(
         "Navigate",
         _nav_default,
@@ -731,108 +731,6 @@ if page == "🏴 Dashboard":
 
         st.markdown("---")
 
-        # ── Hall of Fame + Active Streaks as cards ────────────────────────
-        hof_data = get_hall_of_fame(gbg_df, qi_df)
-        hof1, hof2 = st.columns(2)
-
-        with hof1:
-            st.markdown('<div class="section-title">🏆 Hall of Fame — All-Time #1 Finishers</div>', unsafe_allow_html=True)
-            if hof_data:
-                medal_map = {1:"🥇", 2:"🥈", 3:"🥉"}
-                for rank, row in enumerate(hof_data, 1):
-                    medal = medal_map.get(rank, f"#{rank}")
-                    gbg_b = f'<span style="color:#FFD700;">⚔️ {row["gbg_wins"]}× GBG</span>' if row["gbg_wins"] else ""
-                    qi_b  = f'<span style="color:#C0C0C0;">🌀 {row["qi_wins"]}× QI</span>'   if row["qi_wins"]  else ""
-                    gap   = "&nbsp;&nbsp;" if row["gbg_wins"] and row["qi_wins"] else ""
-                    st.markdown(f"""
-                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
-                                padding:12px 16px;margin-bottom:8px;display:flex;
-                                align-items:center;gap:14px;">
-                      <div style="font-size:1.4rem;min-width:32px;">{medal}</div>
-                      <div style="flex:1;">
-                        <div style="color:#E8E8E8;font-weight:700;font-size:0.95rem;">{row["player"]}</div>
-                        <div style="margin-top:4px;">{gbg_b}{gap}{qi_b}</div>
-                      </div>
-                      <div style="color:#FFD700;font-size:1.1rem;font-weight:800;">{row["total"]} 🥇</div>
-                    </div>""", unsafe_allow_html=True)
-            else:
-                st.info("No season winners yet.")
-
-        with hof2:
-            st.markdown('<div class="section-title">🔥 Longest Active Streaks (GBG)</div>', unsafe_allow_html=True)
-            if streaks:
-                max_streak = streaks[0]["streak"] if streaks else 1
-                for rank, row in enumerate(streaks, 1):
-                    bar_pct = int(row["streak"] / max_streak * 100)
-                    bar_col = "#FFD700" if rank == 1 else "#4A90D9" if rank <= 3 else "#2A2D3A"
-                    st.markdown(f"""
-                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
-                                padding:12px 16px;margin-bottom:8px;">
-                      <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <div style="color:#E8E8E8;font-weight:700;">#{rank} {row["player"]}</div>
-                        <div style="color:#FFD700;font-weight:800;">{row["streak"]} 🔥</div>
-                      </div>
-                      <div style="background:#0E1117;border-radius:4px;height:6px;margin-top:8px;">
-                        <div style="background:{bar_col};width:{bar_pct}%;height:6px;border-radius:4px;"></div>
-                      </div>
-                      <div style="color:#5A5D6A;font-size:0.72rem;margin-top:4px;">{row["total_seasons"]} total seasons</div>
-                    </div>""", unsafe_allow_html=True)
-            else:
-                st.info("No streak data.")
-
-        st.markdown("---")
-
-        # ── Member leaderboards (Points / Goods / Battles) ────────────────
-        ml1, ml2, ml3 = st.columns(3)
-
-        def _leaderboard_cards(title, icon, data, value_key, value_label, value_color, sub_key=None):
-            st.markdown(f'<div class="section-title">{icon} {title}</div>', unsafe_allow_html=True)
-            if not data:
-                st.info("No member data yet.")
-                return
-            medal_map = {0:"🥇", 1:"🥈", 2:"🥉"}
-            max_val   = data[0][value_key] if data else 1
-            for i, row in enumerate(data):
-                medal   = medal_map.get(i, f"#{i+1}")
-                bar_pct = int(row[value_key] / max(max_val, 1) * 100)
-                bar_col = "#FFD700" if i==0 else "#C0C0C0" if i==1 else "#CD7F32" if i==2 else value_color
-                val_str = f"{row[value_key]:,}"
-                sub_str = row.get(sub_key, "") if sub_key else ""
-                st.markdown(f"""
-                <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
-                            padding:10px 14px;margin-bottom:6px;">
-                  <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                      <span style="font-size:1rem;">{medal}</span>
-                      <div>
-                        <div style="color:#E8E8E8;font-weight:700;font-size:0.88rem;">{row['player']}</div>
-                        {"<div style='color:#8A8D9A;font-size:0.7rem;'>"+sub_str+"</div>" if sub_str else ""}
-                      </div>
-                    </div>
-                    <div style="text-align:right;">
-                      <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">{value_label}</div>
-                      <div style="color:{value_color};font-weight:800;font-size:0.9rem;">{val_str}</div>
-                    </div>
-                  </div>
-                  <div style="background:#0E1117;border-radius:4px;height:3px;margin-top:7px;">
-                    <div style="background:{bar_col};width:{bar_pct}%;height:3px;border-radius:4px;"></div>
-                  </div>
-                </div>""", unsafe_allow_html=True)
-
-        with ml1:
-            pts_data = get_points_leaderboard(members_df, gbg_df, qi_df)
-            _leaderboard_cards("Top Points", "🏅", pts_data, "points", "Points", "#FFD700", "eraName")
-
-        with ml2:
-            goods_data = get_goods_leaderboard(members_df, gbg_df, qi_df)
-            _leaderboard_cards("Top Guild Goods Daily", "📦", goods_data, "guildgoods", "Goods/Day", "#4A90D9", "eraName")
-
-        with ml3:
-            battles_data = get_battles_leaderboard(members_df, gbg_df, qi_df)
-            _leaderboard_cards("Top Won Battles", "⚔️", battles_data, "won_battles", "Won Battles", "#2ECC71", "eraName")
-
-        st.markdown("---")
-
         # ── Points trend + Era distribution ──────────────────────────────
         pt1, pt2 = st.columns(2)
         with pt1:
@@ -847,15 +745,6 @@ if page == "🏴 Dashboard":
                 st.plotly_chart(era_distribution_chart(members_df), width="stretch")
             else:
                 st.info("No member snapshot data yet.")
-
-        st.markdown("---")
-
-        # ── Activity heatmap ──────────────────────────────────────────────
-        st.markdown('<div class="section-title">🗓️ Season Activity Heatmap (GBG Fights)</div>', unsafe_allow_html=True)
-        if not gbg_df.empty:
-            st.plotly_chart(activity_heatmap(gbg_df), width="stretch")
-        else:
-            st.info("No GBG data yet.")
 
         st.markdown("---")
 
@@ -1704,69 +1593,8 @@ elif page == "📊 Metrics":
                     <div style="color:#8A8D9A;font-size:0.8rem;">{rest_val:,} {value_col.lower()}</div>
                 </div>""", unsafe_allow_html=True)
 
-            # ── Per-player breakdown cards ──
-            st.markdown('<div class="section-title">Player Breakdown</div>', unsafe_allow_html=True)
-            _medal_map = {0:"🥇",1:"🥈",2:"🥉"}
-            _bar_colors = [
-                "#FFD700","#C0C0C0","#CD7F32",
-                "#4A90D9","#4A90D9","#4A90D9",
-                "#4A90D9","#4A90D9","#4A90D9","#4A90D9",
-            ]
-            for i, (_, row) in enumerate(_latest.iterrows()):
-                _medal   = _medal_map.get(i, f"#{i+1}")
-                _bar_pct = int(row["pct"])
-                _bc      = _bar_colors[i] if i < len(_bar_colors) else "#4A90D9"
-                _val     = int(row[value_col])
-                _pct_str = f"{row['pct']:.1f}%"
-                # width of bar = actual percentage (max ~30% typical, scale to 100% of max)
-                _bar_w   = int(row["pct"] / max(_latest["pct"].iloc[0], 1) * 100)
-                st.markdown(f"""
-                <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
-                            padding:10px 16px;margin-bottom:5px;">
-                  <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <div style="display:flex;align-items:center;gap:10px;">
-                      <span style="font-size:1rem;min-width:28px;">{_medal}</span>
-                      <span style="color:#E8E8E8;font-weight:700;font-size:0.92rem;">{row['Player']}</span>
-                    </div>
-                    <div style="display:flex;gap:24px;align-items:center;">
-                      <div style="text-align:right;">
-                        <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">{value_col}</div>
-                        <div style="color:#E8E8E8;font-weight:600;">{_val:,}</div>
-                      </div>
-                      <div style="text-align:right;min-width:48px;">
-                        <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Share</div>
-                        <div style="color:{_bc};font-weight:800;font-size:1rem;">{_pct_str}</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div style="background:#0E1117;border-radius:4px;height:5px;margin-top:8px;">
-                    <div style="background:{_bc};width:{_bar_w}%;height:5px;border-radius:4px;"></div>
-                  </div>
-                </div>""", unsafe_allow_html=True)
-
-            # Rest of guild summary row
-            if rest_pct > 0:
-                st.markdown(f"""
-                <div style="background:#12151E;border:1px solid #2A2D3A;border-radius:10px;
-                            padding:10px 16px;margin-bottom:5px;opacity:0.8;">
-                  <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <div style="display:flex;align-items:center;gap:10px;">
-                      <span style="font-size:1rem;min-width:28px;">👥</span>
-                      <span style="color:#8A8D9A;font-weight:600;font-size:0.92rem;">
-                        Rest of guild ({len(rest)} players)</span>
-                    </div>
-                    <div style="display:flex;gap:24px;align-items:center;">
-                      <div style="text-align:right;">
-                        <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">{value_col}</div>
-                        <div style="color:#8A8D9A;font-weight:600;">{rest_val:,}</div>
-                      </div>
-                      <div style="text-align:right;min-width:48px;">
-                        <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Share</div>
-                        <div style="color:#8A8D9A;font-weight:800;font-size:1rem;">{rest_pct:.1f}%</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>""", unsafe_allow_html=True)
+            # ── KPI strip only, no per-player breakdown ──
+            pass  # breakdown removed — see Player Breakdown section below
 
         with _metric_tabs[0]:
             if not gbg_df.empty:
@@ -1781,3 +1609,118 @@ elif page == "📊 Metrics":
                 _contribution_chart(qi_df, "Progress", _qi_seasons[-1], "#9B59B6", "#2A2D3A")
             else:
                 st.info("No QI data yet.")
+
+        st.markdown("---")
+
+        # ── Member leaderboards (Points / Goods / Battles) ────────────────
+        st.markdown('<div class="section-title">🏅 Member Leaderboards</div>', unsafe_allow_html=True)
+        ml1, ml2, ml3 = st.columns(3)
+
+        def _leaderboard_cards(title, icon, data, value_key, value_label, value_color, sub_key=None):
+            st.markdown(f'<div class="section-title">{icon} {title}</div>', unsafe_allow_html=True)
+            if not data:
+                st.info("No member data yet.")
+                return
+            medal_map = {0:"🥇", 1:"🥈", 2:"🥉"}
+            max_val   = data[0][value_key] if data else 1
+            for i, row in enumerate(data):
+                medal   = medal_map.get(i, f"#{i+1}")
+                bar_pct = int(row[value_key] / max(max_val, 1) * 100)
+                bar_col = "#FFD700" if i==0 else "#C0C0C0" if i==1 else "#CD7F32" if i==2 else value_color
+                val_str = f"{row[value_key]:,}"
+                sub_str = row.get(sub_key, "") if sub_key else ""
+                st.markdown(f"""
+                <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                            padding:10px 14px;margin-bottom:6px;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <span style="font-size:1rem;">{medal}</span>
+                      <div>
+                        <div style="color:#E8E8E8;font-weight:700;font-size:0.88rem;">{row['player']}</div>
+                        {"<div style='color:#8A8D9A;font-size:0.7rem;'>"+sub_str+"</div>" if sub_str else ""}
+                      </div>
+                    </div>
+                    <div style="text-align:right;">
+                      <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">{value_label}</div>
+                      <div style="color:{value_color};font-weight:800;font-size:0.9rem;">{val_str}</div>
+                    </div>
+                  </div>
+                  <div style="background:#0E1117;border-radius:4px;height:3px;margin-top:7px;">
+                    <div style="background:{bar_col};width:{bar_pct}%;height:3px;border-radius:4px;"></div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
+
+        with ml1:
+            pts_data = get_points_leaderboard(members_df, gbg_df, qi_df)
+            _leaderboard_cards("Top Points", "🏅", pts_data, "points", "Points", "#FFD700", "eraName")
+        with ml2:
+            goods_data = get_goods_leaderboard(members_df, gbg_df, qi_df)
+            _leaderboard_cards("Top Guild Goods Daily", "📦", goods_data, "guildgoods", "Goods/Day", "#4A90D9", "eraName")
+        with ml3:
+            battles_data = get_battles_leaderboard(members_df, gbg_df, qi_df)
+            _leaderboard_cards("Top Won Battles", "⚔️", battles_data, "won_battles", "Won Battles", "#2ECC71", "eraName")
+
+        st.markdown("---")
+
+        # ── Season Activity Heatmap ───────────────────────────────────────
+        st.markdown('<div class="section-title">🗓️ Season Activity Heatmap (GBG Fights)</div>', unsafe_allow_html=True)
+        if not gbg_df.empty:
+            st.plotly_chart(activity_heatmap(gbg_df), width="stretch")
+        else:
+            st.info("No GBG data yet.")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# PAGE: HALL OF FAME
+# ══════════════════════════════════════════════════════════════════════════
+elif page == "🏆 Hall of Fame":
+    st.markdown("# 🏆 Hall of Fame")
+
+    hof_col, streak_col = st.columns(2)
+
+    with hof_col:
+        st.markdown('<div class="section-title">🏆 All-Time #1 Finishers</div>', unsafe_allow_html=True)
+        hof_data = get_hall_of_fame(gbg_df, qi_df)
+        if hof_data:
+            medal_map = {1:"🥇", 2:"🥈", 3:"🥉"}
+            for rank, row in enumerate(hof_data, 1):
+                medal = medal_map.get(rank, f"#{rank}")
+                gbg_b = f'<span style="color:#FFD700;">⚔️ {row["gbg_wins"]}× GBG</span>' if row["gbg_wins"] else ""
+                qi_b  = f'<span style="color:#C0C0C0;">🌀 {row["qi_wins"]}× QI</span>'   if row["qi_wins"]  else ""
+                gap   = "&nbsp;&nbsp;" if row["gbg_wins"] and row["qi_wins"] else ""
+                st.markdown(f"""
+                <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                            padding:14px 18px;margin-bottom:8px;display:flex;
+                            align-items:center;gap:14px;">
+                  <div style="font-size:1.6rem;min-width:36px;">{medal}</div>
+                  <div style="flex:1;">
+                    <div style="color:#E8E8E8;font-weight:700;font-size:1rem;">{row["player"]}</div>
+                    <div style="margin-top:5px;">{gbg_b}{gap}{qi_b}</div>
+                  </div>
+                  <div style="color:#FFD700;font-size:1.3rem;font-weight:800;">{row["total"]} 🥇</div>
+                </div>""", unsafe_allow_html=True)
+        else:
+            st.info("No season winners recorded yet.")
+
+    with streak_col:
+        st.markdown('<div class="section-title">🔥 Longest Active Streaks (GBG)</div>', unsafe_allow_html=True)
+        streaks_hof = get_active_streak(gbg_df, qi_df)
+        if streaks_hof:
+            max_streak = streaks_hof[0]["streak"]
+            for rank, row in enumerate(streaks_hof, 1):
+                bar_pct = int(row["streak"] / max(max_streak, 1) * 100)
+                bar_col = "#FFD700" if rank == 1 else "#4A90D9" if rank <= 3 else "#2A2D3A"
+                st.markdown(f"""
+                <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                            padding:14px 18px;margin-bottom:8px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <div style="color:#E8E8E8;font-weight:700;font-size:1rem;">#{rank} {row["player"]}</div>
+                    <div style="color:#FFD700;font-weight:800;font-size:1.1rem;">{row["streak"]} 🔥</div>
+                  </div>
+                  <div style="background:#0E1117;border-radius:4px;height:6px;margin-top:8px;">
+                    <div style="background:{bar_col};width:{bar_pct}%;height:6px;border-radius:4px;"></div>
+                  </div>
+                  <div style="color:#5A5D6A;font-size:0.75rem;margin-top:5px;">{row["total_seasons"]} total seasons participated</div>
+                </div>""", unsafe_allow_html=True)
+        else:
+            st.info("No streak data yet.")
