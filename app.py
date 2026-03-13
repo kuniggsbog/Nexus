@@ -46,7 +46,7 @@ IMPORT_PASS = os.environ.get("IMPORT_PASSWORD", "guild2024")  # set via Streamli
 
 # ── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="FoE Guild Tracker",
+    page_title="FoE Nexus Statistics",
     page_icon="🏴",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -178,7 +178,7 @@ with st.sidebar:
     st.markdown(
         f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">'
         f'{"<img src=data:image/png;base64," + flag_b64 + " width=28 height=28>" if flag_b64 else "🏴"}'
-        f'<span style="font-size:1.2rem;font-weight:800;color:#E8E8E8;">Guild Tracker</span>'
+        f'<span style="font-size:1.2rem;font-weight:800;color:#E8E8E8;">NEXUS</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
