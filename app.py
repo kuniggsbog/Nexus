@@ -28,7 +28,7 @@ from modules.qi_analysis import (
     get_top_contributors as qi_top,
     get_cumulative_progress,
 )
-from modules.player_profile import get_all_players, get_player_profile, get_most_consistent_players, get_latest_member_stats
+from modules.player_profile import get_all_players, get_player_profile, get_most_consistent_players, get_latest_member_stats, get_all_season_winners
 from modules.comparisons import (
     gbg_season_comparison, qi_season_comparison,
     detect_player_status, most_improved_gbg, most_improved_qi, sort_seasons,
@@ -46,7 +46,7 @@ IMPORT_PASS = os.environ.get("IMPORT_PASSWORD", "guild2024")  # set via Streamli
 
 # ── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="FoE Nexus Statistics",
+    page_title="FoE Guild Tracker",
     page_icon="🏴",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -178,7 +178,7 @@ with st.sidebar:
     st.markdown(
         f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">'
         f'{"<img src=data:image/png;base64," + flag_b64 + " width=28 height=28>" if flag_b64 else "🏴"}'
-        f'<span style="font-size:1.2rem;font-weight:800;color:#E8E8E8;">NEXUS</span>'
+        f'<span style="font-size:1.2rem;font-weight:800;color:#E8E8E8;">Guild Tracker</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -205,6 +205,7 @@ with st.sidebar:
 gbg_df     = get_gbg_df()
 qi_df      = get_qi_df()
 members_df = get_members_df()
+wins_df    = get_all_season_winners(gbg_df, qi_df)  # medal counts per player
 
 
 # ── Strip Player_ID from any display dataframe ─────────────────────────────
@@ -481,6 +482,17 @@ elif page == "👤 Player Profiles":
                                 f'</div>'
                             )
 
+                        # Medal / round wins
+                        wins_row  = wins_df[wins_df["Player_ID"] == pid] if not wins_df.empty else pd.DataFrame()
+                        gbg_wins  = int(wins_row["gbg_wins"].iloc[0])  if not wins_row.empty else 0
+                        qi_wins   = int(wins_row["qi_wins"].iloc[0])   if not wins_row.empty else 0
+                        medals_html = ""
+                        if gbg_wins > 0 or qi_wins > 0:
+                            gbg_medal = f'<span style="color:#FFD700;font-size:0.78rem;font-weight:700;">🥇 {gbg_wins}× GBG</span>' if gbg_wins > 0 else ""
+                            qi_medal  = f'<span style="color:#C0C0C0;font-size:0.78rem;font-weight:700;">🥇 {qi_wins}× QI</span>'  if qi_wins  > 0 else ""
+                            gap       = '&nbsp;&nbsp;' if gbg_wins > 0 and qi_wins > 0 else ""
+                            medals_html = f'<div style="margin-top:5px;">{gbg_medal}{gap}{qi_medal}</div>'
+
                         st.markdown(f"""
                         <div class="{card_class}">
                           <div style="display:flex;align-items:flex-start;gap:14px;">
@@ -489,6 +501,7 @@ elif page == "👤 Player Profiles":
                               <div class="{name_class}">{prow['Player']}{former_tag}</div>
                               <div style="margin-top:4px;">{badges}</div>
                               {stats_html}
+                              {medals_html}
                             </div>
                           </div>
                         </div>
@@ -573,7 +586,20 @@ elif page == "👤 Player Profiles":
                 </div>
                 """, unsafe_allow_html=True)
 
-            tab_gbg_p, tab_qi_p = st.tabs([
+            # ── Wins badges ──────────────────────────────────────────────
+            wins = profile.get("wins", {})
+            gbg_w = wins.get("gbg_wins", 0)
+            qi_w  = wins.get("qi_wins", 0)
+            if gbg_w > 0 or qi_w > 0:
+                wins_parts = []
+                if gbg_w > 0:
+                    wins_parts.append(f'<span style="background:#2A2000;color:#FFD700;padding:4px 14px;border-radius:20px;font-size:0.85rem;font-weight:700;">🥇 {gbg_w}× GBG #1</span>')
+                if qi_w > 0:
+                    wins_parts.append(f'<span style="background:#1A1A2A;color:#C0C0C0;padding:4px 14px;border-radius:20px;font-size:0.85rem;font-weight:700;">🥇 {qi_w}× QI #1</span>')
+                st.markdown(
+                    f'<div style="display:flex;gap:10px;margin-bottom:12px;">{"".join(wins_parts)}</div>',
+                    unsafe_allow_html=True,
+                )
                 f"{'⚔️' if not gbg_icon() else ''} GBG History",
                 f"{'🌀' if not qi_icon() else ''} QI History",
             ])

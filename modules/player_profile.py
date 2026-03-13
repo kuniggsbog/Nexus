@@ -27,7 +27,70 @@ def get_latest_member_stats(members_df: pd.DataFrame, player_id: str) -> dict:
     }
 
 
-def get_all_players(gbg_df: pd.DataFrame, qi_df: pd.DataFrame, members_df: pd.DataFrame = None) -> dict:
+def get_player_wins(gbg_df: pd.DataFrame, qi_df: pd.DataFrame, player_id: str) -> dict:
+    """
+    Count how many seasons a player finished #1 on:
+    - GBG: most Fights in that season
+    - QI:  most Progress in that season
+    Returns dict with gbg_wins and qi_wins counts.
+    """
+    pid = str(player_id)
+    gbg_wins = 0
+    qi_wins  = 0
+
+    if not gbg_df.empty and "Fights" in gbg_df.columns:
+        for season in gbg_df["season"].unique():
+            sdf = gbg_df[gbg_df["season"] == season]
+            if sdf.empty:
+                continue
+            top_pid = sdf.loc[sdf["Fights"].idxmax(), "Player_ID"]
+            if str(top_pid) == pid:
+                gbg_wins += 1
+
+    if not qi_df.empty and "Progress" in qi_df.columns:
+        for season in qi_df["season"].unique():
+            sdf = qi_df[qi_df["season"] == season]
+            if sdf.empty:
+                continue
+            top_pid = sdf.loc[sdf["Progress"].idxmax(), "Player_ID"]
+            if str(top_pid) == pid:
+                qi_wins += 1
+
+    return {"gbg_wins": gbg_wins, "qi_wins": qi_wins}
+
+
+def get_all_season_winners(gbg_df: pd.DataFrame, qi_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    For every player, count GBG fight wins and QI progress wins across all seasons.
+    Used to display medal counts on player cards.
+    """
+    rows = {}
+
+    if not gbg_df.empty and "Fights" in gbg_df.columns:
+        for season in gbg_df["season"].unique():
+            sdf = gbg_df[gbg_df["season"] == season]
+            if sdf.empty:
+                continue
+            top_pid = str(sdf.loc[sdf["Fights"].idxmax(), "Player_ID"])
+            rows.setdefault(top_pid, {"gbg_wins": 0, "qi_wins": 0})
+            rows[top_pid]["gbg_wins"] += 1
+
+    if not qi_df.empty and "Progress" in qi_df.columns:
+        for season in qi_df["season"].unique():
+            sdf = qi_df[qi_df["season"] == season]
+            if sdf.empty:
+                continue
+            top_pid = str(sdf.loc[sdf["Progress"].idxmax(), "Player_ID"])
+            rows.setdefault(top_pid, {"gbg_wins": 0, "qi_wins": 0})
+            rows[top_pid]["qi_wins"] += 1
+
+    if not rows:
+        return pd.DataFrame(columns=["Player_ID", "gbg_wins", "qi_wins"])
+
+    result = pd.DataFrame([
+        {"Player_ID": pid, **vals} for pid, vals in rows.items()
+    ])
+    return result
     """
     Return current and former player lists.
     If members_df provided, current players are sorted by points descending.
@@ -107,14 +170,15 @@ def get_player_profile(player_id: str, gbg_df: pd.DataFrame, qi_df: pd.DataFrame
                 break
 
     profile = {
-        "player_id": pid,
-        "player_name": player_name,
-        "is_former": is_former,
-        "gbg_history": gbg_hist,
-        "qi_history": qi_hist,
-        "gbg_changes": {},
-        "qi_changes": {},
+        "player_id":    pid,
+        "player_name":  player_name,
+        "is_former":    is_former,
+        "gbg_history":  gbg_hist,
+        "qi_history":   qi_hist,
+        "gbg_changes":  {},
+        "qi_changes":   {},
         "member_stats": get_latest_member_stats(members_df, pid) if members_df is not None else {},
+        "wins":         get_player_wins(gbg_df, qi_df, pid),
     }
 
     if len(gbg_hist) >= 2:
