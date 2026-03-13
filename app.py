@@ -483,25 +483,23 @@ elif page == "👤 Player Profiles":
                             )
 
                         # Medal / round wins
-                        wins_row  = wins_df[wins_df["Player_ID"] == pid] if not wins_df.empty else pd.DataFrame()
-                        gbg_wins  = int(wins_row["gbg_wins"].iloc[0])  if not wins_row.empty else 0
-                        qi_wins   = int(wins_row["qi_wins"].iloc[0])   if not wins_row.empty else 0
-                        medals_html = ""
-                        if gbg_wins > 0 or qi_wins > 0:
-                            gbg_medal = f'<span style="color:#FFD700;font-size:0.78rem;font-weight:700;">🥇 {gbg_wins}× GBG</span>' if gbg_wins > 0 else ""
-                            qi_medal  = f'<span style="color:#C0C0C0;font-size:0.78rem;font-weight:700;">🥇 {qi_wins}× QI</span>'  if qi_wins  > 0 else ""
-                            gap       = '&nbsp;&nbsp;' if gbg_wins > 0 and qi_wins > 0 else ""
-                            medals_html = f'<div style="margin-top:5px;">{gbg_medal}{gap}{qi_medal}</div>'
+                        wins_row = wins_df[wins_df["Player_ID"] == pid] if not wins_df.empty else pd.DataFrame()
+                        gbg_wins = int(wins_row["gbg_wins"].iloc[0]) if not wins_row.empty else 0
+                        qi_wins  = int(wins_row["qi_wins"].iloc[0])  if not wins_row.empty else 0
+                        medals = ""
+                        if gbg_wins > 0:
+                            medals += f'<span style="color:#FFD700;font-size:0.75rem;font-weight:700;margin-left:6px;">🥇{gbg_wins}× GBG</span>'
+                        if qi_wins > 0:
+                            medals += f'<span style="color:#C0C0C0;font-size:0.75rem;font-weight:700;margin-left:6px;">🥇{qi_wins}× QI</span>'
 
                         st.markdown(f"""
                         <div class="{card_class}">
                           <div style="display:flex;align-items:flex-start;gap:14px;">
                             {avatar_html}
                             <div style="flex:1;min-width:0;">
-                              <div class="{name_class}">{prow['Player']}{former_tag}</div>
+                              <div class="{name_class}">{prow['Player']}{former_tag}{medals}</div>
                               <div style="margin-top:4px;">{badges}</div>
                               {stats_html}
-                              {medals_html}
                             </div>
                           </div>
                         </div>
