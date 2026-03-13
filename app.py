@@ -1,0 +1,696 @@
+"""
+app.py - Guild Statistics Tracker for Forge of Empires
+"""
+
+import streamlit as st
+import pandas as pd
+import base64
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+from modules.importer import (
+    import_gbg, import_qi, get_gbg_df, get_qi_df, get_all_seasons, delete_season,
+)
+from modules.gbg_analysis import (
+    get_leaderboard as gbg_leaderboard,
+    get_guild_totals_by_season as gbg_totals,
+    get_top_contributors as gbg_top,
+    get_cumulative_fights,
+)
+from modules.qi_analysis import (
+    get_leaderboard as qi_leaderboard,
+    get_guild_totals_by_season as qi_totals,
+    get_top_contributors as qi_top,
+    get_cumulative_progress,
+)
+from modules.player_profile import get_all_players, get_player_profile, get_most_consistent_players
+from modules.comparisons import (
+    gbg_season_comparison, qi_season_comparison,
+    detect_player_status, most_improved_gbg, most_improved_qi,
+)
+from modules.charts import (
+    gbg_fights_leaderboard, gbg_total_contribution_chart, gbg_guild_trend, gbg_player_trend,
+    qi_progress_leaderboard, qi_guild_trend, qi_player_trend, comparison_waterfall,
+)
+
+# ── Constants ──────────────────────────────────────────────────────────────
+AVATAR_DIR  = Path("assets/avatars")
+ICON_DIR    = Path("assets/icons")
+IMPORT_PASS = os.environ.get("IMPORT_PASSWORD", "guild2024")  # set via Streamlit secrets or env
+
+
+# ── Page config ────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="FoE Guild Tracker",
+    page_icon="🏴",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+
+# ── Icon helpers ───────────────────────────────────────────────────────────
+def _img_to_b64(path: Path) -> str:
+    if path.exists():
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    return ""
+
+def icon_html(filename: str, size: int = 22) -> str:
+    b64 = _img_to_b64(ICON_DIR / filename)
+    if b64:
+        return f'<img src="data:image/png;base64,{b64}" width="{size}" height="{size}" style="vertical-align:middle;margin-right:6px;">'
+    return ""
+
+def gbg_icon(size=22):  return icon_html("gbg_icon.png", size)
+def qi_icon(size=22):   return icon_html("qi_icon.png", size)
+def flag_icon(size=22): return icon_html("flag_icon.png", size)
+
+
+# ── Avatar helper ──────────────────────────────────────────────────────────
+def get_avatar_html(player_name: str, size: int = 56) -> str:
+    """Return <img> if player_name.jpg exists, else styled initials div."""
+    safe_name = player_name.strip()
+    jpg_path = AVATAR_DIR / f"{safe_name}.jpg"
+    png_path = AVATAR_DIR / f"{safe_name}.png"
+
+    for path in [jpg_path, png_path]:
+        if path.exists():
+            ext = "jpeg" if path.suffix == ".jpg" else "png"
+            b64 = _img_to_b64(path)
+            return (f'<img src="data:{ext};base64,{b64}" '
+                    f'width="{size}" height="{size}" '
+                    f'style="border-radius:50%;object-fit:cover;">')
+
+    initials = "".join(w[0].upper() for w in safe_name.split()[:2]) or "?"
+    return (f'<div style="width:{size}px;height:{size}px;border-radius:50%;'
+            f'background:linear-gradient(135deg,#4A90D9 0%,#9B59B6 100%);'
+            f'display:flex;align-items:center;justify-content:center;'
+            f'font-size:{int(size*0.35)}px;font-weight:700;color:white;">'
+            f'{initials}</div>')
+
+
+# ── CSS ────────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+[data-testid="stAppViewContainer"] { background: #0E1117; }
+[data-testid="stSidebar"] { background: #12151E; border-right: 1px solid #2A2D3A; }
+
+.metric-card {
+    background: #1A1D27; border: 1px solid #2A2D3A;
+    border-radius: 12px; padding: 18px 22px; margin-bottom: 12px;
+}
+.metric-label { color: #8A8D9A; font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+.metric-value { color: #E8E8E8; font-size: 1.9rem; font-weight: 700; margin: 4px 0; }
+.metric-change-pos { color: #2ECC71; font-size: 0.88rem; font-weight: 600; }
+.metric-change-neg { color: #E74C3C; font-size: 0.88rem; font-weight: 600; }
+
+.player-card {
+    background: #1A1D27; border: 1px solid #2A2D3A;
+    border-radius: 14px; padding: 18px 20px; margin-bottom: 12px;
+}
+.player-card-former {
+    background: #161820; border: 1px solid #3A2A2A;
+    border-radius: 14px; padding: 18px 20px; margin-bottom: 12px;
+    opacity: 0.75;
+}
+.player-name  { color: #E8E8E8; font-size: 1.05rem; font-weight: 700; }
+.player-name-former { color: #8A8D9A; font-size: 1.05rem; font-weight: 700; }
+.former-badge {
+    display:inline-block; background:#3A1A1A; color:#E74C3C;
+    padding:2px 10px; border-radius:20px; font-size:0.72rem; font-weight:700;
+    margin-left:6px; vertical-align:middle;
+}
+
+.badge-gbg { background:#1A3A5C; color:#4A90D9; padding:2px 10px; border-radius:20px; font-size:0.75rem; font-weight:700; }
+.badge-qi  { background:#3A1A5C; color:#9B59B6; padding:2px 10px; border-radius:20px; font-size:0.75rem; font-weight:700; }
+
+.profile-hero {
+    background: linear-gradient(135deg,#1A1D27 0%,#12151E 100%);
+    border: 1px solid #2A2D3A; border-radius:16px; padding:28px; margin-bottom:20px;
+}
+.profile-name        { color:#E8E8E8; font-size:1.6rem; font-weight:800; margin:0; }
+.profile-name-former { color:#8A8D9A; font-size:1.6rem; font-weight:800; margin:0; }
+
+.section-title {
+    color:#4A90D9; font-size:1.05rem; font-weight:700;
+    border-left:3px solid #4A90D9; padding-left:10px; margin:18px 0 10px;
+}
+.former-section-header {
+    color:#E74C3C; font-size:1rem; font-weight:700; margin:28px 0 10px;
+    border-left:3px solid #E74C3C; padding-left:10px;
+}
+
+.pill-new       { background:#1A3A1A; color:#2ECC71; padding:2px 10px; border-radius:20px; font-size:0.75rem; }
+.pill-returning { background:#3A2A1A; color:#F39C12; padding:2px 10px; border-radius:20px; font-size:0.75rem; }
+.pill-missing   { background:#3A1A1A; color:#E74C3C;  padding:2px 10px; border-radius:20px; font-size:0.75rem; }
+.pill-active    { background:#1A1D27; color:#8A8D9A;  padding:2px 10px; border-radius:20px; font-size:0.75rem; }
+
+.stButton button {
+    background:#4A90D9 !important; color:white !important;
+    border:none !important; border-radius:8px !important; font-weight:600 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# ── Session state ──────────────────────────────────────────────────────────
+if "selected_player" not in st.session_state:
+    st.session_state.selected_player = None
+if "import_authenticated" not in st.session_state:
+    st.session_state.import_authenticated = False
+
+
+# ── Sidebar ────────────────────────────────────────────────────────────────
+with st.sidebar:
+    flag_b64 = _img_to_b64(ICON_DIR / "flag_icon.png")
+    gbg_b64  = _img_to_b64(ICON_DIR / "gbg_icon.png")
+    qi_b64   = _img_to_b64(ICON_DIR / "qi_icon.png")
+
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">'
+        f'{"<img src=data:image/png;base64," + flag_b64 + " width=28 height=28>" if flag_b64 else "🏴"}'
+        f'<span style="font-size:1.2rem;font-weight:800;color:#E8E8E8;">Guild Tracker</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("---")
+    page = st.radio(
+        "Navigate",
+        ["🏴 Overview", "GBG", "QI", "👤 Player Profiles", "📥 Data Import"],
+        label_visibility="collapsed",
+        format_func=lambda x: x,
+    )
+    st.markdown("---")
+    seasons = get_all_seasons()
+    if seasons["gbg"]:
+        st.markdown(f"**GBG:** {', '.join(seasons['gbg'])}")
+    if seasons["qi"]:
+        st.markdown(f"**QI:** {', '.join(seasons['qi'])}")
+
+
+# ── Patch radio labels to include icons ───────────────────────────────────
+# (Streamlit sidebar radio doesn't render HTML, so we use emoji fallbacks
+#  and display the real icons in page headings instead)
+
+# ── Load data ──────────────────────────────────────────────────────────────
+gbg_df = get_gbg_df()
+qi_df  = get_qi_df()
+
+
+# ── Strip Player_ID from any display dataframe ─────────────────────────────
+def hide_pid(df: pd.DataFrame) -> pd.DataFrame:
+    return df.drop(columns=[c for c in ["Player_ID", "player_id"] if c in df.columns])
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# PAGE: OVERVIEW
+# ══════════════════════════════════════════════════════════════════════════
+if page == "🏴 Overview":
+    st.markdown(
+        f'<h1>{flag_icon(32)} Guild Overview</h1>',
+        unsafe_allow_html=True,
+    )
+
+    gbg_tots = gbg_totals(gbg_df)
+    qi_tots  = qi_totals(qi_df)
+
+    if gbg_tots.empty and qi_tots.empty:
+        st.info("👋 Welcome! Head to **📥 Data Import** to upload your first season CSV.")
+    else:
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric("Total Guild Fights", f"{int(gbg_df['Fights'].sum()):,}" if not gbg_df.empty else "—")
+        with c2:
+            st.metric("Total QI Progress", f"{int(qi_df['Progress'].sum()):,}" if not qi_df.empty else "—")
+        with c3:
+            st.metric("GBG Players Tracked", gbg_df["Player_ID"].nunique() if not gbg_df.empty else 0)
+        with c4:
+            st.metric("QI Players Tracked", qi_df["Player_ID"].nunique() if not qi_df.empty else 0)
+
+        st.markdown("---")
+        col_l, col_r = st.columns(2)
+
+        with col_l:
+            st.markdown(f'<div class="section-title">{gbg_icon()} GBG Season Totals</div>', unsafe_allow_html=True)
+            if not gbg_tots.empty:
+                st.plotly_chart(gbg_guild_trend(gbg_tots), use_container_width=True)
+                st.dataframe(
+                    hide_pid(gbg_tots).rename(columns={
+                        "season": "Season", "total_fights": "Fights",
+                        "total_negotiations": "Negotiations",
+                        "total_contribution": "Total", "player_count": "Players",
+                    }).set_index("Season"),
+                    use_container_width=True,
+                )
+
+        with col_r:
+            st.markdown(f'<div class="section-title">{qi_icon()} QI Season Totals</div>', unsafe_allow_html=True)
+            if not qi_tots.empty:
+                st.plotly_chart(qi_guild_trend(qi_tots), use_container_width=True)
+                st.dataframe(
+                    hide_pid(qi_tots).rename(columns={
+                        "season": "Season", "total_actions": "Actions",
+                        "total_progress": "Progress", "player_count": "Players",
+                    }).set_index("Season"),
+                    use_container_width=True,
+                )
+
+        st.markdown("---")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown(f'<div class="section-title">{gbg_icon()} Top GBG Contributors (Latest)</div>', unsafe_allow_html=True)
+            top_gbg = hide_pid(gbg_top(gbg_df, n=10))
+            if not top_gbg.empty:
+                st.dataframe(top_gbg.reset_index(drop=True), use_container_width=True, hide_index=True)
+
+        with col_b:
+            st.markdown(f'<div class="section-title">{qi_icon()} Top QI Contributors (Latest)</div>', unsafe_allow_html=True)
+            top_qi = hide_pid(qi_top(qi_df, n=10))
+            if not top_qi.empty:
+                st.dataframe(top_qi.reset_index(drop=True), use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+        st.markdown('<div class="section-title">📋 Player Status — Latest Season</div>', unsafe_allow_html=True)
+        status_df = detect_player_status(gbg_df, qi_df)
+        if not status_df.empty:
+            for sec in status_df["section"].unique():
+                st.markdown(f"**{sec}**")
+                sec_df = status_df[status_df["section"] == sec]
+                latest_season = sec_df["season"].max()
+                latest_df = sec_df[sec_df["season"] == latest_season]
+                for status, css in [("new","pill-new"),("returning","pill-returning"),
+                                     ("missing","pill-missing"),("active","pill-active")]:
+                    names = latest_df[latest_df["status"] == status]["Player"].tolist()
+                    if names:
+                        st.markdown(
+                            f'<span class="{css}">{status.upper()}: {len(names)}</span> — {", ".join(names)}',
+                            unsafe_allow_html=True,
+                        )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# PAGE: GBG
+# ══════════════════════════════════════════════════════════════════════════
+elif page == "GBG":
+    st.markdown(f'<h1>{gbg_icon(32)} Guild Battlegrounds (GBG)</h1>', unsafe_allow_html=True)
+
+    if gbg_df.empty:
+        st.info("No GBG data yet. Import a season in **📥 Data Import**.")
+    else:
+        seasons_list = get_all_seasons()["gbg"]
+        tab_lb, tab_charts, tab_comp, tab_cumu = st.tabs(
+            ["🏅 Leaderboard", "📊 Charts", "📈 Season Comparison", "📦 Cumulative"]
+        )
+
+        with tab_lb:
+            col_s, col_sort = st.columns([2, 2])
+            with col_s:
+                sel_season = st.selectbox("Season", ["Latest"] + seasons_list, key="gbg_lb_season")
+            with col_sort:
+                sort_col = st.selectbox("Sort by", ["Total", "Fights", "Negotiations"], key="gbg_sort")
+
+            season_arg = None if sel_season == "Latest" else sel_season
+            lb = hide_pid(gbg_leaderboard(gbg_df, season=season_arg, sort_by=sort_col))
+            if not lb.empty:
+                st.dataframe(lb, use_container_width=True)
+
+        with tab_charts:
+            chart_season = st.selectbox("Season for charts", ["Latest"] + seasons_list, key="gbg_chart_season")
+            ca = None if chart_season == "Latest" else chart_season
+            top_n = st.slider("Show top N players", 5, 40, 20, key="gbg_topn")
+            st.plotly_chart(gbg_fights_leaderboard(gbg_df, season=ca, top_n=top_n), use_container_width=True)
+            st.plotly_chart(gbg_total_contribution_chart(gbg_df, season=ca, top_n=top_n), use_container_width=True)
+            st.plotly_chart(gbg_guild_trend(gbg_totals(gbg_df)), use_container_width=True)
+
+        with tab_comp:
+            comp = gbg_season_comparison(gbg_df)
+            if comp.empty:
+                st.info("Need at least 2 seasons for comparison.")
+            else:
+                s_curr = comp["season_current"].iloc[0]
+                s_prev = comp["season_previous"].iloc[0]
+                st.markdown(f"### {s_curr} vs {s_prev}")
+                comp_metric = st.selectbox("Metric", ["Fights", "Negotiations", "Total"], key="gbg_comp_metric")
+                display = comp[["Player", f"{comp_metric}_previous", f"{comp_metric}_current",
+                                f"{comp_metric}_change", f"{comp_metric}_pct"]].copy()
+                display.columns = ["Player", s_prev, s_curr, "Change", "Change %"]
+                display["Change"]   = display["Change"].apply(lambda v: f"+{v:,}" if v >= 0 else f"{v:,}")
+                display["Change %"] = display["Change %"].apply(lambda v: f"+{v:.2f}%" if v >= 0 else f"{v:.2f}%")
+                st.dataframe(display.reset_index(drop=True), use_container_width=True, hide_index=True)
+                st.plotly_chart(
+                    comparison_waterfall(comp, comp_metric, f"GBG {comp_metric}: {s_curr} vs {s_prev}"),
+                    use_container_width=True,
+                )
+
+        with tab_cumu:
+            st.subheader("📦 Cumulative Fights (All Seasons)")
+            cumu = hide_pid(get_cumulative_fights(gbg_df))
+            if not cumu.empty:
+                st.dataframe(cumu.reset_index(drop=True), use_container_width=True, hide_index=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# PAGE: QI
+# ══════════════════════════════════════════════════════════════════════════
+elif page == "QI":
+    st.markdown(f'<h1>{qi_icon(32)} Quantum Incursions (QI)</h1>', unsafe_allow_html=True)
+
+    if qi_df.empty:
+        st.info("No QI data yet. Import a season in **📥 Data Import**.")
+    else:
+        qi_seasons_list = get_all_seasons()["qi"]
+        tab_lb, tab_charts, tab_comp, tab_cumu = st.tabs(
+            ["🏅 Leaderboard", "📊 Charts", "📈 Season Comparison", "📦 Cumulative"]
+        )
+
+        with tab_lb:
+            col_s, col_sort = st.columns([2, 2])
+            with col_s:
+                qi_sel = st.selectbox("Season", ["Latest"] + qi_seasons_list, key="qi_lb_season")
+            with col_sort:
+                qi_sort = st.selectbox("Sort by", ["Progress", "Actions"], key="qi_sort")
+            qi_season_arg = None if qi_sel == "Latest" else qi_sel
+            qi_lb = hide_pid(qi_leaderboard(qi_df, season=qi_season_arg, sort_by=qi_sort))
+            if not qi_lb.empty:
+                st.dataframe(qi_lb, use_container_width=True)
+
+        with tab_charts:
+            qi_chart_s = st.selectbox("Season for charts", ["Latest"] + qi_seasons_list, key="qi_chart_season")
+            qi_ca = None if qi_chart_s == "Latest" else qi_chart_s
+            qi_top_n = st.slider("Show top N players", 5, 40, 20, key="qi_topn")
+            st.plotly_chart(qi_progress_leaderboard(qi_df, season=qi_ca, top_n=qi_top_n), use_container_width=True)
+            st.plotly_chart(qi_guild_trend(qi_totals(qi_df)), use_container_width=True)
+
+        with tab_comp:
+            qi_comp = qi_season_comparison(qi_df)
+            if qi_comp.empty:
+                st.info("Need at least 2 seasons for comparison.")
+            else:
+                qi_s_curr = qi_comp["season_current"].iloc[0]
+                qi_s_prev = qi_comp["season_previous"].iloc[0]
+                st.markdown(f"### {qi_s_curr} vs {qi_s_prev}")
+                qi_comp_metric = st.selectbox("Metric", ["Progress", "Actions"], key="qi_comp_metric")
+                qi_display = qi_comp[["Player", f"{qi_comp_metric}_previous", f"{qi_comp_metric}_current",
+                                      f"{qi_comp_metric}_change", f"{qi_comp_metric}_pct"]].copy()
+                qi_display.columns = ["Player", qi_s_prev, qi_s_curr, "Change", "Change %"]
+                qi_display["Change"]   = qi_display["Change"].apply(lambda v: f"+{v:,}" if v >= 0 else f"{v:,}")
+                qi_display["Change %"] = qi_display["Change %"].apply(lambda v: f"+{v:.2f}%" if v >= 0 else f"{v:.2f}%")
+                st.dataframe(qi_display.reset_index(drop=True), use_container_width=True, hide_index=True)
+                st.plotly_chart(
+                    comparison_waterfall(qi_comp, qi_comp_metric, f"QI {qi_comp_metric}: {qi_s_curr} vs {qi_s_prev}"),
+                    use_container_width=True,
+                )
+
+        with tab_cumu:
+            st.subheader("📦 Cumulative Progress (All Seasons)")
+            qi_cumu = hide_pid(get_cumulative_progress(qi_df))
+            if not qi_cumu.empty:
+                st.dataframe(qi_cumu.reset_index(drop=True), use_container_width=True, hide_index=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# PAGE: PLAYER PROFILES
+# ══════════════════════════════════════════════════════════════════════════
+elif page == "👤 Player Profiles":
+    st.title("👤 Player Profiles")
+
+    players = get_all_players(gbg_df, qi_df)
+    current_players = players["current"]
+    former_players  = players["former"]
+
+    if current_players.empty and former_players.empty:
+        st.info("No player data found. Import seasons first.")
+    else:
+        search = st.text_input("🔍 Search players...", placeholder="Type a name...")
+
+        def filter_players(df):
+            if not search:
+                return df
+            return df[df["Player"].str.contains(search, case=False, na=False)]
+
+        curr_filtered   = filter_players(current_players)
+        former_filtered = filter_players(former_players)
+
+        def render_player_grid(df, is_former=False):
+            if df.empty:
+                return
+            cols_per_row = 3
+            for i in range(0, len(df), cols_per_row):
+                row_df = df.iloc[i:i+cols_per_row]
+                cols = st.columns(cols_per_row)
+                for col, (_, prow) in zip(cols, row_df.iterrows()):
+                    with col:
+                        pid = str(prow["Player_ID"])
+                        has_gbg = not gbg_df.empty and pid in gbg_df["Player_ID"].values
+                        has_qi  = not qi_df.empty  and pid in qi_df["Player_ID"].values
+                        badges = ""
+                        if has_gbg: badges += '<span class="badge-gbg">GBG</span> '
+                        if has_qi:  badges += '<span class="badge-qi">QI</span>'
+
+                        avatar_html = get_avatar_html(prow["Player"], size=52)
+                        name_class  = "player-name-former" if is_former else "player-name"
+                        card_class  = "player-card-former" if is_former else "player-card"
+                        former_tag  = '<span class="former-badge">LEFT GUILD</span>' if is_former else ""
+
+                        st.markdown(f"""
+                        <div class="{card_class}">
+                          <div style="display:flex;align-items:center;gap:14px;">
+                            {avatar_html}
+                            <div>
+                              <div class="{name_class}">{prow['Player']}{former_tag}</div>
+                              <div style="margin-top:6px;">{badges}</div>
+                            </div>
+                          </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        if st.button("View Profile", key=f"btn_{pid}"):
+                            st.session_state.selected_player = pid
+                            st.rerun()
+
+        # ── Profile view or grid ──────────────────────────────────────────
+        if st.session_state.selected_player is None:
+            total = len(curr_filtered) + len(former_filtered)
+            st.markdown(f"**{total} players found**")
+
+            # Current members
+            if not curr_filtered.empty:
+                render_player_grid(curr_filtered, is_former=False)
+
+            # Former members
+            if not former_filtered.empty:
+                st.markdown(
+                    '<div class="former-section-header">🚪 Previous Guild Members</div>',
+                    unsafe_allow_html=True,
+                )
+                st.caption("These players do not appear in the latest season data. Records are kept for if they rejoin.")
+                render_player_grid(former_filtered, is_former=True)
+
+        else:
+            # ── Individual profile ────────────────────────────────────────
+            pid = st.session_state.selected_player
+            if st.button("← Back to Players"):
+                st.session_state.selected_player = None
+                st.rerun()
+
+            profile = get_player_profile(pid, gbg_df, qi_df)
+            avatar_html = get_avatar_html(profile["player_name"], size=72)
+            name_class  = "profile-name-former" if profile["is_former"] else "profile-name"
+            former_tag  = '<span class="former-badge" style="font-size:0.8rem;">LEFT GUILD</span>' if profile["is_former"] else ""
+
+            st.markdown(f"""
+            <div class="profile-hero">
+              <div style="display:flex;align-items:center;gap:20px;">
+                {avatar_html}
+                <div>
+                  <p class="{name_class}">{profile['player_name']} {former_tag}</p>
+                </div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            tab_gbg_p, tab_qi_p = st.tabs([
+                f"{'⚔️' if not gbg_icon() else ''} GBG History",
+                f"{'🌀' if not qi_icon() else ''} QI History",
+            ])
+
+            with tab_gbg_p:
+                gbg_hist = profile["gbg_history"]
+                gbg_chg  = profile["gbg_changes"]
+                if gbg_hist.empty:
+                    st.info("No GBG data for this player.")
+                else:
+                    if gbg_chg:
+                        s_c = gbg_chg.get("season_current", "")
+                        s_p = gbg_chg.get("season_previous", "")
+                        st.markdown(f"**{s_c} vs {s_p}**")
+                        ci1, ci2, ci3 = st.columns(3)
+                        for ci, metric in zip([ci1, ci2, ci3], ["Fights", "Negotiations", "Total"]):
+                            if metric in gbg_chg:
+                                d = gbg_chg[metric]
+                                sign = "+" if d["delta"] >= 0 else ""
+                                with ci:
+                                    st.metric(
+                                        label=metric,
+                                        value=f"{d['current']:,}",
+                                        delta=f"{sign}{d['delta']:,} ({sign}{d['pct']:.2f}%)",
+                                    )
+                    st.markdown("---")
+                    st.markdown('<div class="section-title">Season History</div>', unsafe_allow_html=True)
+                    st.dataframe(
+                        hide_pid(gbg_hist)[["season", "Fights", "Negotiations", "Total"]].set_index("season"),
+                        use_container_width=True,
+                    )
+                    st.plotly_chart(gbg_player_trend(gbg_hist, profile["player_name"]), use_container_width=True)
+
+            with tab_qi_p:
+                qi_hist = profile["qi_history"]
+                qi_chg  = profile["qi_changes"]
+                if qi_hist.empty:
+                    st.info("No QI data for this player.")
+                else:
+                    if qi_chg:
+                        s_c = qi_chg.get("season_current", "")
+                        s_p = qi_chg.get("season_previous", "")
+                        st.markdown(f"**{s_c} vs {s_p}**")
+                        qc1, qc2 = st.columns(2)
+                        for ci, metric in zip([qc1, qc2], ["Actions", "Progress"]):
+                            if metric in qi_chg:
+                                d = qi_chg[metric]
+                                sign = "+" if d["delta"] >= 0 else ""
+                                with ci:
+                                    st.metric(
+                                        label=metric,
+                                        value=f"{d['current']:,}",
+                                        delta=f"{sign}{d['delta']:,} ({sign}{d['pct']:.2f}%)",
+                                    )
+                    st.markdown("---")
+                    st.markdown('<div class="section-title">Season History</div>', unsafe_allow_html=True)
+                    st.dataframe(
+                        hide_pid(qi_hist)[["season", "Actions", "Progress"]].set_index("season"),
+                        use_container_width=True,
+                    )
+                    st.plotly_chart(qi_player_trend(qi_hist, profile["player_name"]), use_container_width=True)
+
+            st.markdown("---")
+            mc1, mc2 = st.columns(2)
+            with mc1:
+                st.subheader("🏅 Most Consistent (GBG)")
+                cons = get_most_consistent_players(gbg_df, qi_df, "GBG")
+                if not cons.empty:
+                    st.dataframe(cons.head(10), use_container_width=True, hide_index=True)
+            with mc2:
+                st.subheader("🏅 Most Consistent (QI)")
+                cons_qi = get_most_consistent_players(gbg_df, qi_df, "QI")
+                if not cons_qi.empty:
+                    st.dataframe(cons_qi.head(10), use_container_width=True, hide_index=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# PAGE: DATA IMPORT  (password-protected)
+# ══════════════════════════════════════════════════════════════════════════
+elif page == "📥 Data Import":
+    st.title("📥 Data Import")
+
+    # ── Password gate ─────────────────────────────────────────────────────
+    if not st.session_state.import_authenticated:
+        st.markdown("### 🔒 Import area is password protected")
+        pwd_input = st.text_input("Enter import password", type="password", key="import_pwd")
+        if st.button("Unlock"):
+            if pwd_input == IMPORT_PASS:
+                st.session_state.import_authenticated = True
+                st.rerun()
+            else:
+                st.error("Incorrect password.")
+        st.info("Contact your guild administrator for the import password.")
+        st.stop()
+
+    # Authenticated ────────────────────────────────────────────────────────
+    st.success("🔓 Import unlocked")
+    if st.button("🔒 Lock import"):
+        st.session_state.import_authenticated = False
+        st.rerun()
+
+    tab_gbg_imp, tab_qi_imp, tab_manage, tab_sample = st.tabs(
+        ["⚔️ Import GBG", "🌀 Import QI", "🗂️ Manage Seasons", "📄 Sample CSVs"]
+    )
+
+    with tab_gbg_imp:
+        st.subheader("Import GBG Season")
+        st.markdown("**Required columns:** `Player_ID`, `Player`, `Negotiations`, `Fights`, `Total`")
+        gbg_season_name = st.text_input("Season name", placeholder="e.g. GBG_S1", key="gbg_season_input")
+        gbg_file = st.file_uploader("Upload GBG CSV", type=["csv"], key="gbg_upload")
+        if gbg_file and gbg_season_name:
+            try:
+                df_preview = pd.read_csv(gbg_file)
+                st.dataframe(df_preview.head(), use_container_width=True, hide_index=True)
+                if st.button("✅ Confirm Import", key="gbg_confirm"):
+                    gbg_file.seek(0)
+                    ok, msg = import_gbg(pd.read_csv(gbg_file), gbg_season_name.strip())
+                    st.success(msg) if ok else st.error(msg)
+                    if ok:
+                        st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
+        elif gbg_file:
+            st.warning("Enter a season name first.")
+
+    with tab_qi_imp:
+        st.subheader("Import QI Season")
+        st.markdown("**Required columns:** `Player_ID`, `Player`, `Actions`, `Progress`")
+        qi_season_name = st.text_input("Season name", placeholder="e.g. QI_S1", key="qi_season_input")
+        qi_file = st.file_uploader("Upload QI CSV", type=["csv"], key="qi_upload")
+        if qi_file and qi_season_name:
+            try:
+                df_preview = pd.read_csv(qi_file)
+                st.dataframe(df_preview.head(), use_container_width=True, hide_index=True)
+                if st.button("✅ Confirm Import", key="qi_confirm"):
+                    qi_file.seek(0)
+                    ok, msg = import_qi(pd.read_csv(qi_file), qi_season_name.strip())
+                    st.success(msg) if ok else st.error(msg)
+                    if ok:
+                        st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
+        elif qi_file:
+            st.warning("Enter a season name first.")
+
+    with tab_manage:
+        st.subheader("Manage Imported Seasons")
+        all_seas = get_all_seasons()
+        col_g, col_q = st.columns(2)
+        with col_g:
+            st.markdown("**GBG Seasons**")
+            for s in all_seas.get("gbg", []):
+                c1, c2 = st.columns([3, 1])
+                c1.write(s)
+                if c2.button("🗑️", key=f"del_gbg_{s}"):
+                    st.success(delete_season("gbg", s))
+                    st.rerun()
+            if not all_seas.get("gbg"):
+                st.info("None imported.")
+        with col_q:
+            st.markdown("**QI Seasons**")
+            for s in all_seas.get("qi", []):
+                c1, c2 = st.columns([3, 1])
+                c1.write(s)
+                if c2.button("🗑️", key=f"del_qi_{s}"):
+                    st.success(delete_season("qi", s))
+                    st.rerun()
+            if not all_seas.get("qi"):
+                st.info("None imported.")
+
+    with tab_sample:
+        st.subheader("Download Sample CSV Templates")
+        gbg_sample = "Player_ID,Player,Negotiations,Fights,Total\n854681998,Zodman,0,7097,7097\n1234051,Devils Deciple.,0,5744,5744\n7954450,Bloody Pastor,116,5451,5683\n"
+        qi_sample  = "Player_ID,Player,Actions,Progress\n705849,lasherbob,4262800,12150\n853267111,Kuniggsbog,3855900,11000\n854719004,soldier00,3843900,10950\n"
+        c1, c2 = st.columns(2)
+        with c1:
+            st.download_button("⬇️ GBG Template", gbg_sample, "gbg_template.csv", "text/csv")
+            st.code(gbg_sample)
+        with c2:
+            st.download_button("⬇️ QI Template", qi_sample, "qi_template.csv", "text/csv")
+            st.code(qi_sample)

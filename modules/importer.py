@@ -1,0 +1,115 @@
+"""
+importer.py - Data import, validation, and persistence for Guild Tracker
+"""
+
+import pandas as pd
+import json
+import os
+from pathlib import Path
+from datetime import datetime
+
+GBG_REQUIRED_COLS = {"Player_ID", "Player", "Negotiations", "Fights", "Total"}
+QI_REQUIRED_COLS  = {"Player_ID", "Player", "Actions", "Progress"}
+
+MASTER_PATH = Path("data/processed/master.json")
+
+
+def validate_gbg(df: pd.DataFrame) -> tuple[bool, str]:
+    missing = GBG_REQUIRED_COLS - set(df.columns)
+    if missing:
+        return False, f"Missing columns: {missing}"
+    return True, "OK"
+
+
+def validate_qi(df: pd.DataFrame) -> tuple[bool, str]:
+    missing = QI_REQUIRED_COLS - set(df.columns)
+    if missing:
+        return False, f"Missing columns: {missing}"
+    return True, "OK"
+
+
+def load_master() -> dict:
+    if MASTER_PATH.exists():
+        with open(MASTER_PATH, "r") as f:
+            return json.load(f)
+    return {"gbg": [], "qi": [], "meta": {"last_updated": None}}
+
+
+def save_master(master: dict):
+    MASTER_PATH.parent.mkdir(parents=True, exist_ok=True)
+    master["meta"]["last_updated"] = datetime.now().isoformat()
+    with open(MASTER_PATH, "w") as f:
+        json.dump(master, f, indent=2)
+
+
+def import_gbg(df: pd.DataFrame, season: str) -> tuple[bool, str]:
+    ok, msg = validate_gbg(df)
+    if not ok:
+        return False, msg
+    master = load_master()
+    master["gbg"] = [r for r in master["gbg"] if r.get("season") != season]
+    df = df.copy()
+    df["Player_ID"]   = df["Player_ID"].astype(str)
+    df["season"]      = season
+    df["section"]     = "GBG"
+    df["imported_at"] = datetime.now().isoformat()
+    for col in ["Negotiations", "Fights", "Total"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+    records = df.to_dict(orient="records")
+    master["gbg"].extend(records)
+    save_master(master)
+    return True, f"Imported {len(records)} GBG records for season '{season}'"
+
+
+def import_qi(df: pd.DataFrame, season: str) -> tuple[bool, str]:
+    ok, msg = validate_qi(df)
+    if not ok:
+        return False, msg
+    master = load_master()
+    master["qi"] = [r for r in master["qi"] if r.get("season") != season]
+    df = df.copy()
+    df["Player_ID"]   = df["Player_ID"].astype(str)
+    df["season"]      = season
+    df["section"]     = "QI"
+    df["imported_at"] = datetime.now().isoformat()
+    for col in ["Actions", "Progress"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+    records = df.to_dict(orient="records")
+    master["qi"].extend(records)
+    save_master(master)
+    return True, f"Imported {len(records)} QI records for season '{season}'"
+
+
+def get_gbg_df() -> pd.DataFrame:
+    master = load_master()
+    if not master["gbg"]:
+        return pd.DataFrame(columns=["Player_ID", "Player", "Negotiations", "Fights", "Total", "season"])
+    df = pd.DataFrame(master["gbg"])
+    df["Player_ID"] = df["Player_ID"].astype(str)
+    return df
+
+
+def get_qi_df() -> pd.DataFrame:
+    master = load_master()
+    if not master["qi"]:
+        return pd.DataFrame(columns=["Player_ID", "Player", "Actions", "Progress", "season"])
+    df = pd.DataFrame(master["qi"])
+    df["Player_ID"] = df["Player_ID"].astype(str)
+    return df
+
+
+def get_all_seasons() -> dict:
+    master = load_master()
+    gbg_seasons = sorted({r["season"] for r in master["gbg"]}) if master["gbg"] else []
+    qi_seasons  = sorted({r["season"] for r in master["qi"]})  if master["qi"]  else []
+    return {"gbg": gbg_seasons, "qi": qi_seasons}
+
+
+def delete_season(section: str, season: str) -> str:
+    master  = load_master()
+    key     = section.lower()
+    before  = len(master[key])
+    master[key] = [r for r in master[key] if r.get("season") != season]
+    removed = before - len(master[key])
+    save_master(master)
+    return f"Removed {removed} records for {section} season '{season}'"
