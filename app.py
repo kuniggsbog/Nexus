@@ -189,7 +189,7 @@ with st.sidebar:
     st.markdown("---")
     page = st.radio(
         "Navigate",
-        ["🏴 Overview", "GBG", "QI", "👤 Player Profiles", "📥 Data Import"],
+        ["🏴 Dashboard", "GBG", "QI", "👤 Player Profiles", "📥 Data Import"],
         label_visibility="collapsed",
         format_func=lambda x: x,
     )
@@ -220,9 +220,9 @@ def hide_pid(df: pd.DataFrame) -> pd.DataFrame:
 # ══════════════════════════════════════════════════════════════════════════
 # PAGE: OVERVIEW
 # ══════════════════════════════════════════════════════════════════════════
-if page == "🏴 Overview":
+if page == "🏴 Dashboard":
     st.markdown(
-        f'<h1>{flag_icon(32)} Guild Overview</h1>',
+        f'<h1>{flag_icon(32)} Guild Dashboard</h1>',
         unsafe_allow_html=True,
     )
 
@@ -304,63 +304,228 @@ if page == "🏴 Overview":
                     st.metric("QI Players", curr_qp, delta=curr_qp - prev_qp)
             st.markdown("---")
 
-        # ── Trend charts + season totals ──────────────────────────────────
+        # ── Trend charts + season total CARDS ────────────────────────────
         col_l, col_r = st.columns(2)
         with col_l:
             st.markdown(f'<div class="section-title">{gbg_icon()} GBG Season Totals</div>', unsafe_allow_html=True)
             if not gbg_tots.empty:
                 st.plotly_chart(gbg_guild_trend(gbg_tots), use_container_width=True)
-                st.dataframe(
-                    hide_pid(gbg_tots).rename(columns={
-                        "season": "Season", "total_fights": "Fights",
-                        "total_negotiations": "Negotiations",
-                        "total_contribution": "Total", "player_count": "Players",
-                    }).set_index("Season"),
-                    use_container_width=True,
-                )
+                gbg_tot_disp = hide_pid(gbg_tots).rename(columns={
+                    "season":"Season","total_fights":"Fights",
+                    "total_negotiations":"Negotiations","total_contribution":"Total","player_count":"Players"
+                })
+                for _, row in gbg_tot_disp.iterrows():
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                padding:12px 16px;margin-bottom:6px;display:flex;align-items:center;gap:16px;">
+                      <div style="flex:1;">
+                        <div style="color:#E8E8E8;font-weight:700;font-size:0.9rem;">⚔️ {row['Season']}</div>
+                      </div>
+                      <div style="text-align:center;min-width:70px;">
+                        <div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Fights</div>
+                        <div style="color:#FFD700;font-weight:700;">{int(row['Fights']):,}</div>
+                      </div>
+                      <div style="text-align:center;min-width:70px;">
+                        <div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Negotiations</div>
+                        <div style="color:#4A90D9;font-weight:700;">{int(row['Negotiations']):,}</div>
+                      </div>
+                      <div style="text-align:center;min-width:60px;">
+                        <div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Players</div>
+                        <div style="color:#2ECC71;font-weight:700;">{int(row['Players'])}</div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
+
         with col_r:
             st.markdown(f'<div class="section-title">{qi_icon()} QI Season Totals</div>', unsafe_allow_html=True)
             if not qi_tots.empty:
                 st.plotly_chart(qi_guild_trend(qi_tots), use_container_width=True)
-                st.dataframe(
-                    hide_pid(qi_tots).rename(columns={
-                        "season": "Season", "total_actions": "Actions",
-                        "total_progress": "Progress", "player_count": "Players",
-                    }).set_index("Season"),
-                    use_container_width=True,
-                )
+                qi_tot_disp = hide_pid(qi_tots).rename(columns={
+                    "season":"Season","total_actions":"Actions","total_progress":"Progress","player_count":"Players"
+                })
+                for _, row in qi_tot_disp.iterrows():
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                padding:12px 16px;margin-bottom:6px;display:flex;align-items:center;gap:16px;">
+                      <div style="flex:1;">
+                        <div style="color:#E8E8E8;font-weight:700;font-size:0.9rem;">🌀 {row['Season']}</div>
+                      </div>
+                      <div style="text-align:center;min-width:80px;">
+                        <div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Progress</div>
+                        <div style="color:#FFD700;font-weight:700;">{int(row['Progress']):,}</div>
+                      </div>
+                      <div style="text-align:center;min-width:80px;">
+                        <div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Actions</div>
+                        <div style="color:#4A90D9;font-weight:700;">{int(row['Actions']):,}</div>
+                      </div>
+                      <div style="text-align:center;min-width:60px;">
+                        <div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Players</div>
+                        <div style="color:#2ECC71;font-weight:700;">{int(row['Players'])}</div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
 
         st.markdown("---")
 
-        # ── Top contributors ──────────────────────────────────────────────
+        # ── Top contributors CARDS ────────────────────────────────────────
         col_a, col_b = st.columns(2)
         with col_a:
             st.markdown(f'<div class="section-title">{gbg_icon()} Top GBG Contributors (Latest)</div>', unsafe_allow_html=True)
             top_gbg = hide_pid(gbg_top(gbg_df, n=10))
             if not top_gbg.empty:
-                st.dataframe(top_gbg.reset_index(drop=True), use_container_width=True, hide_index=True)
+                medal_map = {0:"🥇",1:"🥈",2:"🥉"}
+                max_fights = top_gbg["Fights"].max() if "Fights" in top_gbg.columns else 1
+                for i, (_, row) in enumerate(top_gbg.iterrows()):
+                    medal   = medal_map.get(i, f"#{i+1}")
+                    bar_pct = int(row.get("Fights", 0) / max(max_fights, 1) * 100)
+                    bar_col = "#FFD700" if i == 0 else "#C0C0C0" if i == 1 else "#CD7F32" if i == 2 else "#4A90D9"
+                    fights  = f"{int(row.get('Fights',0)):,}"
+                    negs    = f"{int(row.get('Negotiations',0)):,}"
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                padding:12px 16px;margin-bottom:6px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                          <span style="font-size:1.1rem;">{medal}</span>
+                          <span style="color:#E8E8E8;font-weight:700;font-size:0.9rem;">{row['Player']}</span>
+                        </div>
+                        <div style="display:flex;gap:16px;">
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Fights</div>
+                            <div style="color:#FFD700;font-weight:700;font-size:0.85rem;">{fights}</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Negs</div>
+                            <div style="color:#4A90D9;font-weight:700;font-size:0.85rem;">{negs}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style="background:#0E1117;border-radius:4px;height:4px;margin-top:8px;">
+                        <div style="background:{bar_col};width:{bar_pct}%;height:4px;border-radius:4px;"></div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
+
         with col_b:
             st.markdown(f'<div class="section-title">{qi_icon()} Top QI Contributors (Latest)</div>', unsafe_allow_html=True)
             top_qi = hide_pid(qi_top(qi_df, n=10))
             if not top_qi.empty:
-                st.dataframe(top_qi.reset_index(drop=True), use_container_width=True, hide_index=True)
+                medal_map = {0:"🥇",1:"🥈",2:"🥉"}
+                max_prog = top_qi["Progress"].max() if "Progress" in top_qi.columns else 1
+                for i, (_, row) in enumerate(top_qi.iterrows()):
+                    medal   = medal_map.get(i, f"#{i+1}")
+                    bar_pct = int(row.get("Progress", 0) / max(max_prog, 1) * 100)
+                    bar_col = "#FFD700" if i == 0 else "#C0C0C0" if i == 1 else "#CD7F32" if i == 2 else "#9B59B6"
+                    prog    = f"{int(row.get('Progress',0)):,}"
+                    actions = f"{int(row.get('Actions',0)):,}"
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                padding:12px 16px;margin-bottom:6px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                          <span style="font-size:1.1rem;">{medal}</span>
+                          <span style="color:#E8E8E8;font-weight:700;font-size:0.9rem;">{row['Player']}</span>
+                        </div>
+                        <div style="display:flex;gap:16px;">
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Progress</div>
+                            <div style="color:#FFD700;font-weight:700;font-size:0.85rem;">{prog}</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Actions</div>
+                            <div style="color:#9B59B6;font-weight:700;font-size:0.85rem;">{actions}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style="background:#0E1117;border-radius:4px;height:4px;margin-top:8px;">
+                        <div style="background:{bar_col};width:{bar_pct}%;height:4px;border-radius:4px;"></div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
 
         st.markdown("---")
 
-        # ── Veteran ranking ───────────────────────────────────────────────
+        # ── Veteran ranking CARDS ─────────────────────────────────────────
         avg1, avg2 = st.columns(2)
         with avg1:
             st.markdown(f'<div class="section-title">{gbg_icon()} Top 10 Avg Fights / Season (GBG)</div>', unsafe_allow_html=True)
             cons_gbg = get_most_consistent_players(gbg_df, qi_df, "GBG")
             if not cons_gbg.empty:
-                st.dataframe(cons_gbg, use_container_width=True, hide_index=False)
+                medal_map  = {1:"🥇",2:"🥈",3:"🥉"}
+                score_col  = "⭐ Score"
+                avg_col    = "Avg Fights / Season"
+                max_score  = int(str(cons_gbg[score_col].iloc[0]).replace(",","")) if score_col in cons_gbg.columns else 1
+                for rank, (_, row) in enumerate(cons_gbg.iterrows(), 1):
+                    medal   = medal_map.get(rank, f"#{rank}")
+                    score_v = str(row.get(score_col,"")).replace(",","")
+                    bar_pct = int(int(score_v) / max(max_score,1) * 100) if score_v.isdigit() else 0
+                    bar_col = "#FFD700" if rank == 1 else "#C0C0C0" if rank == 2 else "#CD7F32" if rank == 3 else "#4A90D9"
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                padding:12px 16px;margin-bottom:6px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                          <span style="font-size:1.0rem;">{medal}</span>
+                          <span style="color:#E8E8E8;font-weight:700;font-size:0.9rem;">{row['Player']}</span>
+                        </div>
+                        <div style="display:flex;gap:14px;">
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Seasons</div>
+                            <div style="color:#2ECC71;font-weight:700;font-size:0.85rem;">{row['Seasons']}</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Avg / Season</div>
+                            <div style="color:#FFD700;font-weight:700;font-size:0.85rem;">{row.get(avg_col,'—')}</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">⭐ Score</div>
+                            <div style="color:#E8E8E8;font-weight:700;font-size:0.85rem;">{row.get(score_col,'—')}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style="background:#0E1117;border-radius:4px;height:4px;margin-top:8px;">
+                        <div style="background:{bar_col};width:{bar_pct}%;height:4px;border-radius:4px;"></div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
             else:
                 st.info("No GBG data yet.")
+
         with avg2:
             st.markdown(f'<div class="section-title">{qi_icon()} Top 10 Avg Progress / Season (QI)</div>', unsafe_allow_html=True)
             cons_qi = get_most_consistent_players(gbg_df, qi_df, "QI")
             if not cons_qi.empty:
-                st.dataframe(cons_qi, use_container_width=True, hide_index=False)
+                medal_map = {1:"🥇",2:"🥈",3:"🥉"}
+                score_col = "⭐ Score"
+                avg_col   = "Avg Progress / Season"
+                max_score = int(str(cons_qi[score_col].iloc[0]).replace(",","")) if score_col in cons_qi.columns else 1
+                for rank, (_, row) in enumerate(cons_qi.iterrows(), 1):
+                    medal   = medal_map.get(rank, f"#{rank}")
+                    score_v = str(row.get(score_col,"")).replace(",","")
+                    bar_pct = int(int(score_v) / max(max_score,1) * 100) if score_v.isdigit() else 0
+                    bar_col = "#FFD700" if rank == 1 else "#C0C0C0" if rank == 2 else "#CD7F32" if rank == 3 else "#9B59B6"
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                padding:12px 16px;margin-bottom:6px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                          <span style="font-size:1.0rem;">{medal}</span>
+                          <span style="color:#E8E8E8;font-weight:700;font-size:0.9rem;">{row['Player']}</span>
+                        </div>
+                        <div style="display:flex;gap:14px;">
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Seasons</div>
+                            <div style="color:#2ECC71;font-weight:700;font-size:0.85rem;">{row['Seasons']}</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Avg / Season</div>
+                            <div style="color:#FFD700;font-weight:700;font-size:0.85rem;">{row.get(avg_col,'—')}</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">⭐ Score</div>
+                            <div style="color:#E8E8E8;font-weight:700;font-size:0.85rem;">{row.get(score_col,'—')}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style="background:#0E1117;border-radius:4px;height:4px;margin-top:8px;">
+                        <div style="background:{bar_col};width:{bar_pct}%;height:4px;border-radius:4px;"></div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
             else:
                 st.info("No QI data yet.")
 
