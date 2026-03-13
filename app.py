@@ -267,11 +267,24 @@ with st.sidebar:
             if _fights == 0:
                 _inactive_players.append(_r["Player"])
             elif _fights < 1000:
-                # Count all seasons where this player was under 1,000 (including current)
-                _pid_str   = str(_r["Player_ID"])
-                _all_games = _gbg_tmp[_gbg_tmp["Player_ID"].astype(str) == _pid_str]
+                _pid_str     = str(_r["Player_ID"])
+                _all_games   = _gbg_tmp[_gbg_tmp["Player_ID"].astype(str) == _pid_str]
                 _times_under = int((_all_games["Fights"] < 1000).sum())
                 _below_min_players.append((_r["Player"], _fights, _times_under))
+
+        # QI below minimum (3,500 progress)
+        _below_qi_players = []
+        if not _qi_tmp.empty:
+            _qi_seasons_s = sort_seasons(_qi_tmp["season"].unique().tolist())
+            _latest_qi_s  = _qi_seasons_s[-1]
+            _latest_qi    = _qi_tmp[_qi_tmp["season"] == _latest_qi_s]
+            for _, _r in _latest_qi.iterrows():
+                _prog = int(_r.get("Progress", 0))
+                if 0 < _prog < 3500:
+                    _pid_str     = str(_r["Player_ID"])
+                    _all_qi      = _qi_tmp[_qi_tmp["Player_ID"].astype(str) == _pid_str]
+                    _times_under = int((_all_qi["Progress"] < 3500).sum())
+                    _below_qi_players.append((_r["Player"], _prog, _times_under))
 
         st.markdown(
             '<div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;'
@@ -279,7 +292,7 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
-        if not (_new_players or _left_players or _inactive_players or _below_min_players):
+        if not (_new_players or _left_players or _inactive_players or _below_min_players or _below_qi_players):
             st.markdown(
                 '<div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:8px;'
                 'padding:10px 12px;margin-bottom:6px;color:#2ECC71;font-size:0.78rem;">✅ All members on track</div>',
@@ -316,11 +329,13 @@ with st.sidebar:
                     unsafe_allow_html=True,
                 )
 
-            _sidebar_pill_list("🌟", "New This Season",          "#2ECC71", names=_new_players)
-            _sidebar_pill_list("⚠️", "Below GBG Minimum (1,000)", "#F39C12",
+            _sidebar_pill_list("🌟", "New This Season",             "#2ECC71", names=_new_players)
+            _sidebar_pill_list("⚠️", "Below GBG Minimum (1,000)",   "#F39C12",
                                names_with_sub=sorted(_below_min_players, key=lambda x: x[1]))
-            _sidebar_pill_list("👋", "Left the Guild",           "#E74C3C", names=_left_players)
-            _sidebar_pill_list("💤", "Inactive (0 Fights)",      "#8A8D9A", names=_inactive_players)
+            _sidebar_pill_list("⚠️", "Below QI Minimum (3,500)",    "#E67E22",
+                               names_with_sub=sorted(_below_qi_players, key=lambda x: x[1]))
+            _sidebar_pill_list("👋", "Left the Guild",               "#E74C3C", names=_left_players)
+            _sidebar_pill_list("💤", "Inactive (0 Fights)",          "#8A8D9A", names=_inactive_players)
         st.markdown("---")
 
     # ── Player quick-jump ─────────────────────────────────────────────────
@@ -1219,35 +1234,6 @@ elif page == "👤 Player Profiles":
             if qi_w > 0:
                 medal_html += f'<span style="background:#1A1A2A;color:#C0C0C0;padding:3px 10px;border-radius:20px;font-size:0.78rem;font-weight:700;margin-left:6px;">🥇{qi_w}× QI</span>'
 
-            stats_block = ""
-            if mem:
-                stats_block = f"""
-                <div style="display:flex;flex-wrap:wrap;gap:28px;margin-top:14px;padding-top:14px;
-                            border-top:1px solid #2A2D3A;">
-                  <div>
-                    <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Points</div>
-                    <div style="color:#FFD700;font-size:1.1rem;font-weight:800;">{pts_str}</div>
-                  </div>
-                  <div>
-                    <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Era</div>
-                    <div style="color:#E8E8E8;font-size:1.0rem;font-weight:700;">{era_str}</div>
-                  </div>
-                  <div>
-                    <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Won Battles</div>
-                    <div style="color:#2ECC71;font-size:1.0rem;font-weight:700;">{wb_str}</div>
-                  </div>
-                  <div>
-                    <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Guild Goods Daily</div>
-                    <div style="color:#4A90D9;font-size:1.0rem;font-weight:700;">{gg_str}</div>
-                  </div>
-                  <div>
-                    <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Guild Rank</div>
-                    <div style="color:#E8E8E8;font-size:1.0rem;font-weight:700;">{rank_str}</div>
-                  </div>
-                </div>
-                <div style="margin-top:8px;color:#5A5D6A;font-size:0.7rem;">As of: {snap_str}</div>
-                """
-
             st.markdown(f"""
             <div class="profile-hero">
               <div style="display:flex;align-items:flex-start;gap:22px;">
@@ -1292,10 +1278,7 @@ elif page == "👤 Player Profiles":
                 </div>
                 """, unsafe_allow_html=True)
 
-            tab_gbg_p, tab_qi_p = st.tabs([
-                f"{'⚔️' if not gbg_icon() else ''} GBG History",
-                f"{'🌀' if not qi_icon() else ''} QI History",
-            ])
+            tab_gbg_p, tab_qi_p = st.tabs(["⚔️ GBG History", "🌀 QI History"])
 
             with tab_gbg_p:
                 gbg_hist = profile["gbg_history"]
@@ -1306,24 +1289,51 @@ elif page == "👤 Player Profiles":
                     if gbg_chg:
                         s_c = gbg_chg.get("season_current", "")
                         s_p = gbg_chg.get("season_previous", "")
-                        st.markdown(f"**{s_c} vs {s_p}**")
+                        st.markdown(f'<div class="section-title">📊 {s_c} vs {s_p}</div>', unsafe_allow_html=True)
                         ci1, ci2, ci3 = st.columns(3)
                         for ci, metric in zip([ci1, ci2, ci3], ["Fights", "Negotiations", "Total"]):
                             if metric in gbg_chg:
-                                d = gbg_chg[metric]
+                                d    = gbg_chg[metric]
                                 sign = "+" if d["delta"] >= 0 else ""
                                 with ci:
-                                    st.metric(
-                                        label=metric,
-                                        value=f"{d['current']:,}",
-                                        delta=f"{sign}{d['delta']:,} ({sign}{d['pct']:.2f}%)",
-                                    )
-                    st.markdown("---")
-                    st.markdown('<div class="section-title">Season History</div>', unsafe_allow_html=True)
-                    st.dataframe(
-                        hide_pid(gbg_hist)[["season", "Fights", "Negotiations", "Total"]].set_index("season"),
-                        width="stretch",
-                    )
+                                    st.metric(label=metric, value=f"{d['current']:,}",
+                                              delta=f"{sign}{d['delta']:,} ({sign}{d['pct']:.1f}%)")
+                    st.markdown('<div class="section-title">📅 Season History</div>', unsafe_allow_html=True)
+                    _gh = hide_pid(gbg_hist)
+                    if "season" in _gh.columns and "Fights" in _gh.columns:
+                        _gh_sorted = _gh.sort_values("season", ascending=False).reset_index(drop=True)
+                        _max_fights = _gh_sorted["Fights"].max() if not _gh_sorted.empty else 1
+                        for _, _row in _gh_sorted.iterrows():
+                            _f  = int(_row.get("Fights", 0))
+                            _n  = int(_row.get("Negotiations", 0))
+                            _t  = int(_row.get("Total", 0))
+                            _bp = int(_f / max(_max_fights, 1) * 100)
+                            _bc = "#2ECC71" if _f >= 1000 else "#E74C3C"
+                            _min_tag = "" if _f >= 1000 else '<span style="color:#E74C3C;font-size:0.7rem;margin-left:6px;">⚠️ below min</span>'
+                            st.markdown(f"""
+                            <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                        padding:10px 16px;margin-bottom:5px;">
+                              <div style="display:flex;align-items:center;justify-content:space-between;">
+                                <div style="color:#8A8D9A;font-weight:600;font-size:0.85rem;">{_row['season']}{_min_tag}</div>
+                                <div style="display:flex;gap:20px;">
+                                  <div style="text-align:right;">
+                                    <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Fights</div>
+                                    <div style="color:#FFD700;font-weight:700;">{_f:,}</div>
+                                  </div>
+                                  <div style="text-align:right;">
+                                    <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Negs</div>
+                                    <div style="color:#4A90D9;font-weight:700;">{_n:,}</div>
+                                  </div>
+                                  <div style="text-align:right;">
+                                    <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Total</div>
+                                    <div style="color:#2ECC71;font-weight:700;">{_t:,}</div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div style="background:#0E1117;border-radius:4px;height:4px;margin-top:8px;">
+                                <div style="background:{_bc};width:{_bp}%;height:4px;border-radius:4px;"></div>
+                              </div>
+                            </div>""", unsafe_allow_html=True)
                     st.plotly_chart(gbg_player_trend(gbg_hist, profile["player_name"]), width="stretch")
 
             with tab_qi_p:
@@ -1335,24 +1345,36 @@ elif page == "👤 Player Profiles":
                     if qi_chg:
                         s_c = qi_chg.get("season_current", "")
                         s_p = qi_chg.get("season_previous", "")
-                        st.markdown(f"**{s_c} vs {s_p}**")
-                        qc1, qc2 = st.columns(2)
-                        for ci, metric in zip([qc1, qc2], ["Actions", "Progress"]):
-                            if metric in qi_chg:
-                                d = qi_chg[metric]
-                                sign = "+" if d["delta"] >= 0 else ""
-                                with ci:
-                                    st.metric(
-                                        label=metric,
-                                        value=f"{d['current']:,}",
-                                        delta=f"{sign}{d['delta']:,} ({sign}{d['pct']:.2f}%)",
-                                    )
-                    st.markdown("---")
-                    st.markdown('<div class="section-title">Season History</div>', unsafe_allow_html=True)
-                    st.dataframe(
-                        hide_pid(qi_hist)[["season", "Actions", "Progress"]].set_index("season"),
-                        width="stretch",
-                    )
+                        st.markdown(f'<div class="section-title">📊 {s_c} vs {s_p}</div>', unsafe_allow_html=True)
+                        if "Progress" in qi_chg:
+                            d    = qi_chg["Progress"]
+                            sign = "+" if d["delta"] >= 0 else ""
+                            st.metric(label="Progress", value=f"{d['current']:,}",
+                                      delta=f"{sign}{d['delta']:,} ({sign}{d['pct']:.1f}%)")
+                    st.markdown('<div class="section-title">📅 Season History</div>', unsafe_allow_html=True)
+                    _qh = hide_pid(qi_hist)
+                    if "season" in _qh.columns and "Progress" in _qh.columns:
+                        _qh_sorted = _qh.sort_values("season", ascending=False).reset_index(drop=True)
+                        _max_prog  = _qh_sorted["Progress"].max() if not _qh_sorted.empty else 1
+                        for _, _row in _qh_sorted.iterrows():
+                            _p  = int(_row.get("Progress", 0))
+                            _bp = int(_p / max(_max_prog, 1) * 100)
+                            _bc = "#9B59B6" if _p >= 3500 else "#E74C3C"
+                            _min_tag = "" if _p >= 3500 else '<span style="color:#E74C3C;font-size:0.7rem;margin-left:6px;">⚠️ below min</span>'
+                            st.markdown(f"""
+                            <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
+                                        padding:10px 16px;margin-bottom:5px;">
+                              <div style="display:flex;align-items:center;justify-content:space-between;">
+                                <div style="color:#8A8D9A;font-weight:600;font-size:0.85rem;">{_row['season']}{_min_tag}</div>
+                                <div style="text-align:right;">
+                                  <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Progress</div>
+                                  <div style="color:#9B59B6;font-weight:700;">{_p:,}</div>
+                                </div>
+                              </div>
+                              <div style="background:#0E1117;border-radius:4px;height:4px;margin-top:8px;">
+                                <div style="background:{_bc};width:{_bp}%;height:4px;border-radius:4px;"></div>
+                              </div>
+                            </div>""", unsafe_allow_html=True)
                     st.plotly_chart(qi_player_trend(qi_hist, profile["player_name"]), width="stretch")
 
             st.markdown("---")
