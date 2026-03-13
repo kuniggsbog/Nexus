@@ -245,3 +245,104 @@ def comparison_waterfall(comp_df: pd.DataFrame, metric: str, title: str) -> go.F
         showlegend=False,
     )
     return fig
+
+
+def points_trend_chart(members_df: pd.DataFrame) -> go.Figure:
+    """Guild total points across member snapshots."""
+    if members_df.empty or "snapshot" not in members_df.columns:
+        return go.Figure()
+    from modules.comparisons import sort_seasons
+    snaps = sort_seasons(members_df["snapshot"].unique().tolist())
+    totals = [
+        {"snapshot": s, "total_points": int(members_df[members_df["snapshot"] == s]["points"].sum())}
+        for s in snaps
+    ]
+    import pandas as _pd
+    data = _pd.DataFrame(totals)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=data["snapshot"], y=data["total_points"],
+        mode="lines+markers+text", name="Guild Points",
+        line=dict(color=GOLD, width=3), marker=dict(size=10),
+        text=data["total_points"].apply(lambda v: f"{v/1e9:.2f}B"),
+        textposition="top center",
+        fill="tozeroy", fillcolor="rgba(255,215,0,0.08)",
+    ))
+    fig.update_layout(
+        **LAYOUT_BASE,
+        title=dict(text="📈 Guild Total Points Over Time", font=dict(size=16)),
+        height=360,
+        yaxis=dict(tickformat=".2s", gridcolor="#2A2D3A"),
+    )
+    return fig
+
+
+def era_distribution_chart(members_df: pd.DataFrame) -> go.Figure:
+    """Pie/donut chart of player era distribution from latest snapshot."""
+    if members_df.empty or "eraName" not in members_df.columns:
+        return go.Figure()
+    from modules.comparisons import sort_seasons
+    snaps  = sort_seasons(members_df["snapshot"].unique().tolist(), descending=True)
+    latest = members_df[members_df["snapshot"] == snaps[0]]
+    counts = latest["eraName"].value_counts().reset_index()
+    counts.columns = ["Era", "Count"]
+    colors = [GOLD, BLUE, PURPLE, GREEN, RED, SILVER, BRONZE, "#E67E22", "#1ABC9C", "#F39C12"]
+    fig = go.Figure(go.Pie(
+        labels=counts["Era"], values=counts["Count"],
+        hole=0.55,
+        marker=dict(colors=colors[:len(counts)], line=dict(color=BG, width=2)),
+        textinfo="label+percent",
+        textfont=dict(size=12),
+    ))
+    fig.update_layout(
+        **LAYOUT_BASE,
+        title=dict(text="🌍 Player Era Distribution", font=dict(size=16)),
+        height=360,
+        showlegend=True,
+        legend=dict(bgcolor=CARD, bordercolor="#2A2D3A", font=dict(size=11)),
+        margin=dict(l=20, r=20, t=50, b=20),
+    )
+    return fig
+
+
+def activity_heatmap(gbg_df: pd.DataFrame) -> go.Figure:
+    """Grid heatmap: players (y) × seasons (x), coloured by fights (0 = absent)."""
+    if gbg_df.empty:
+        return go.Figure()
+    from modules.comparisons import sort_seasons
+    seasons = sort_seasons(gbg_df["season"].unique().tolist())
+    # Only current players (in latest season)
+    latest_pids = set(gbg_df[gbg_df["season"] == seasons[-1]]["Player_ID"].astype(str))
+    df = gbg_df[gbg_df["Player_ID"].astype(str).isin(latest_pids)].copy()
+
+    # Pivot: players as rows, seasons as columns
+    pivot = df.pivot_table(index="Player", columns="season", values="Fights", aggfunc="sum", fill_value=0)
+    pivot = pivot.reindex(columns=seasons, fill_value=0)
+    # Sort players by total fights descending
+    pivot = pivot.loc[pivot.sum(axis=1).sort_values(ascending=False).index]
+
+    import numpy as np
+    z    = pivot.values.tolist()
+    text = [[f"{int(v):,}" if v > 0 else "—" for v in row] for row in pivot.values]
+
+    fig = go.Figure(go.Heatmap(
+        z=z,
+        x=[s[:10] for s in seasons],
+        y=pivot.index.tolist(),
+        text=text,
+        texttemplate="%{text}",
+        textfont=dict(size=10),
+        colorscale=[[0,"#0E1117"],[0.01,"#1A2A3A"],[0.3,BLUE],[0.7,PURPLE],[1.0,GOLD]],
+        showscale=False,
+        hoverongaps=False,
+        xgap=3, ygap=3,
+    ))
+    fig.update_layout(
+        **LAYOUT_BASE,
+        title=dict(text="🗓️ Player Activity Heatmap (GBG Fights)", font=dict(size=16)),
+        height=max(300, len(pivot) * 28 + 80),
+        xaxis=dict(side="top", tickangle=-30, gridcolor="transparent"),
+        yaxis=dict(gridcolor="transparent"),
+        margin=dict(l=120, r=20, t=80, b=20),
+    )
+    return fig

@@ -438,3 +438,67 @@ def get_guild_health(gbg_df: pd.DataFrame, qi_df: pd.DataFrame, members_df: pd.D
             health["goods_delta"] = None
 
     return health
+
+
+def get_points_leaderboard(members_df: pd.DataFrame, gbg_df: pd.DataFrame, qi_df: pd.DataFrame) -> list[dict]:
+    """Top current players ranked by points from latest member snapshot."""
+    if members_df.empty or "points" not in members_df.columns:
+        return []
+    current = _current_pids(gbg_df, qi_df)
+    snaps   = sort_seasons(members_df["snapshot"].unique().tolist(), descending=True)
+    latest  = members_df[members_df["snapshot"] == snaps[0]]
+    rows = []
+    for _, r in latest.iterrows():
+        pid = str(r["Player_ID"])
+        if pid not in current:
+            continue
+        rows.append({
+            "pid":      pid,
+            "player":   r["Player"],
+            "points":   int(r.get("points", 0)),
+            "eraName":  str(r.get("eraName", "—")),
+            "rank":     int(r.get("rank", 0)),
+        })
+    return sorted(rows, key=lambda x: x["points"], reverse=True)[:10]
+
+
+def get_goods_leaderboard(members_df: pd.DataFrame, gbg_df: pd.DataFrame, qi_df: pd.DataFrame) -> list[dict]:
+    """Top current players by daily guild goods donation from latest snapshot."""
+    if members_df.empty or "guildgoods" not in members_df.columns:
+        return []
+    current = _current_pids(gbg_df, qi_df)
+    snaps   = sort_seasons(members_df["snapshot"].unique().tolist(), descending=True)
+    latest  = members_df[members_df["snapshot"] == snaps[0]]
+    rows = []
+    for _, r in latest.iterrows():
+        pid = str(r["Player_ID"])
+        if pid not in current:
+            continue
+        rows.append({
+            "pid":       pid,
+            "player":    r["Player"],
+            "guildgoods": int(r.get("guildgoods", 0)),
+            "eraName":   str(r.get("eraName", "—")),
+        })
+    return sorted(rows, key=lambda x: x["guildgoods"], reverse=True)[:10]
+
+
+def get_battles_leaderboard(members_df: pd.DataFrame, gbg_df: pd.DataFrame, qi_df: pd.DataFrame) -> list[dict]:
+    """Top current players by all-time won battles from latest snapshot."""
+    if members_df.empty or "won_battles" not in members_df.columns:
+        return []
+    current = _current_pids(gbg_df, qi_df)
+    snaps   = sort_seasons(members_df["snapshot"].unique().tolist(), descending=True)
+    latest  = members_df[members_df["snapshot"] == snaps[0]]
+    rows = []
+    for _, r in latest.iterrows():
+        pid = str(r["Player_ID"])
+        if pid not in current:
+            continue
+        rows.append({
+            "pid":         pid,
+            "player":      r["Player"],
+            "won_battles": int(r.get("won_battles", 0)),
+            "eraName":     str(r.get("eraName", "—")),
+        })
+    return sorted(rows, key=lambda x: x["won_battles"], reverse=True)[:10]
