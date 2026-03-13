@@ -338,7 +338,7 @@ def activity_heatmap(gbg_df: pd.DataFrame) -> go.Figure:
         xgap=3, ygap=3,
     ))
     fig.update_layout(
-        **LAYOUT_BASE,
+        **{k: v for k, v in LAYOUT_BASE.items() if k not in ("margin", "xaxis", "yaxis")},
         title=dict(text="🗓️ Player Activity Heatmap (GBG Fights)", font=dict(size=16)),
         height=max(300, len(pivot) * 28 + 80),
         xaxis=dict(side="top", tickangle=-30, gridcolor="transparent"),
