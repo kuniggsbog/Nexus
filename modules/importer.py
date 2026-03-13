@@ -1,19 +1,31 @@
 """
-importer.py - Data import, validation, and persistence for Guild Tracker
+importer.py - CSV-based data loader for Guild Tracker
+Reads CSV files directly from the data/ folders in the repo.
+No master.json needed — just drop CSVs into the right folder and push to GitHub.
+
+Folder structure:
+  data/
+    gbg/        ← one CSV per GBG season, filename = season name
+    qi/         ← one CSV per QI season,  filename = season name
+    members/    ← one CSV per member snapshot, filename = snapshot name
 """
 
 import pandas as pd
-import json
-import os
 from pathlib import Path
-from datetime import datetime
 
-GBG_REQUIRED_COLS     = {"Player_ID", "Player", "Negotiations", "Fights", "Total"}
-QI_REQUIRED_COLS      = {"Player_ID", "Player", "Actions", "Progress"}
-MEMBER_REQUIRED_COLS  = {"member_id", "member", "points", "eraName", "guildgoods", "won_battles"}
+# ── Data directories ───────────────────────────────────────────────────────
+DATA_DIR    = Path("data")
+GBG_DIR     = DATA_DIR / "gbg"
+QI_DIR      = DATA_DIR / "qi"
+MEMBERS_DIR = DATA_DIR / "members"
 
-MASTER_PATH = Path("data/processed/master.json")
+# ── Required columns ───────────────────────────────────────────────────────
+GBG_REQUIRED_COLS    = {"Player_ID", "Player", "Negotiations", "Fights", "Total"}
+QI_REQUIRED_COLS     = {"Player_ID", "Player", "Actions", "Progress"}
+MEMBER_REQUIRED_COLS = {"member_id", "member", "points", "eraName", "guildgoods", "won_battles"}
 
+
+# ── Validation ─────────────────────────────────────────────────────────────
 
 def validate_gbg(df: pd.DataFrame) -> tuple[bool, str]:
     missing = GBG_REQUIRED_COLS - set(df.columns)
@@ -36,143 +48,178 @@ def validate_members(df: pd.DataFrame) -> tuple[bool, str]:
     return True, "OK"
 
 
-def load_master() -> dict:
-    if MASTER_PATH.exists():
-        with open(MASTER_PATH, "r") as f:
-            return json.load(f)
-    return {"gbg": [], "qi": [], "members": [], "meta": {"last_updated": None}}
+# ── Helpers ────────────────────────────────────────────────────────────────
+
+def _season_from_filename(path: Path) -> str:
+    """Convert filename back to season name (underscores → spaces)."""
+    return path.stem.replace("_", " ")
 
 
-def save_master(master: dict):
-    MASTER_PATH.parent.mkdir(parents=True, exist_ok=True)
-    master["meta"]["last_updated"] = datetime.now().isoformat()
-    with open(MASTER_PATH, "w") as f:
-        json.dump(master, f, indent=2)
+def _filename_from_season(season: str) -> str:
+    """Convert season name to safe filename (spaces → underscores)."""
+    return season.strip().replace(" ", "_") + ".csv"
 
 
-def import_gbg(df: pd.DataFrame, season: str) -> tuple[bool, str]:
+def _ensure_dir(path: Path):
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def _load_csv_folder(folder: Path, id_col: str = "Player_ID") -> pd.DataFrame:
+    """Load all CSVs in a folder, adding a 'season' column from the filename."""
+    if not folder.exists():
+        return pd.DataFrame()
+    frames = []
+    for csv_file in sorted(folder.glob("*.csv")):
+        if csv_file.name.startswith("."):
+            continue
+        try:
+            df = pd.read_csv(csv_file)
+            df["season"] = _season_from_filename(csv_file)
+            frames.append(df)
+        except Exception:
+            continue
+    if not frames:
+        return pd.DataFrame()
+    combined = pd.concat(frames, ignore_index=True)
+    if id_col in combined.columns:
+        combined[id_col] = combined[id_col].astype(str)
+    return combined
+
+
+# ── Save CSV (used by the in-app import form) ──────────────────────────────
+
+def save_gbg_csv(df: pd.DataFrame, season: str) -> tuple[bool, str]:
     ok, msg = validate_gbg(df)
     if not ok:
         return False, msg
-    master = load_master()
-    master["gbg"] = [r for r in master["gbg"] if r.get("season") != season]
+    _ensure_dir(GBG_DIR)
     df = df.copy()
-    df["Player_ID"]   = df["Player_ID"].astype(str)
-    df["season"]      = season
-    df["section"]     = "GBG"
-    df["imported_at"] = datetime.now().isoformat()
+    df["Player_ID"] = df["Player_ID"].astype(str)
     for col in ["Negotiations", "Fights", "Total"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
-    records = df.to_dict(orient="records")
-    master["gbg"].extend(records)
-    save_master(master)
-    return True, f"Imported {len(records)} GBG records for season '{season}'"
+    path = GBG_DIR / _filename_from_season(season)
+    df.to_csv(path, index=False)
+    return True, f"Saved {len(df)} GBG records → data/gbg/{path.name}"
 
 
-def import_qi(df: pd.DataFrame, season: str) -> tuple[bool, str]:
+def save_qi_csv(df: pd.DataFrame, season: str) -> tuple[bool, str]:
     ok, msg = validate_qi(df)
     if not ok:
         return False, msg
-    master = load_master()
-    master["qi"] = [r for r in master["qi"] if r.get("season") != season]
+    _ensure_dir(QI_DIR)
     df = df.copy()
-    df["Player_ID"]   = df["Player_ID"].astype(str)
-    df["season"]      = season
-    df["section"]     = "QI"
-    df["imported_at"] = datetime.now().isoformat()
+    df["Player_ID"] = df["Player_ID"].astype(str)
     for col in ["Actions", "Progress"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
-    records = df.to_dict(orient="records")
-    master["qi"].extend(records)
-    save_master(master)
-    return True, f"Imported {len(records)} QI records for season '{season}'"
+    path = QI_DIR / _filename_from_season(season)
+    df.to_csv(path, index=False)
+    return True, f"Saved {len(df)} QI records → data/qi/{path.name}"
 
 
-def import_members(df: pd.DataFrame, snapshot: str) -> tuple[bool, str]:
-    """Import a guild member snapshot (points, era, goods, battles)."""
+def save_members_csv(df: pd.DataFrame, snapshot: str) -> tuple[bool, str]:
     ok, msg = validate_members(df)
     if not ok:
         return False, msg
-    master = load_master()
-    if "members" not in master:
-        master["members"] = []
-    master["members"] = [r for r in master["members"] if r.get("snapshot") != snapshot]
+    _ensure_dir(MEMBERS_DIR)
     df = df.copy()
-    # Normalise column names — accept both member_id/Player_ID, member/Player
+    # Normalise column names
     col_map = {}
     if "member_id" in df.columns: col_map["member_id"] = "Player_ID"
     if "member"    in df.columns: col_map["member"]    = "Player"
     df = df.rename(columns=col_map)
-    df["Player_ID"]   = df["Player_ID"].astype(str)
-    df["snapshot"]    = snapshot
-    df["imported_at"] = datetime.now().isoformat()
+    df["Player_ID"] = df["Player_ID"].astype(str)
     for col in ["points", "guildgoods", "won_battles"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
-    # keep rank if present
     if "rank" in df.columns:
         df["rank"] = pd.to_numeric(df["rank"], errors="coerce").fillna(0).astype(int)
-    records = df.to_dict(orient="records")
-    master["members"].extend(records)
-    save_master(master)
-    return True, f"Imported {len(records)} member records for snapshot '{snapshot}'"
+    path = MEMBERS_DIR / _filename_from_season(snapshot)
+    df.to_csv(path, index=False)
+    return True, f"Saved {len(df)} member records → data/members/{path.name}"
 
+
+# ── Read ───────────────────────────────────────────────────────────────────
 
 def get_gbg_df() -> pd.DataFrame:
-    master = load_master()
-    if not master["gbg"]:
+    df = _load_csv_folder(GBG_DIR)
+    if df.empty:
         return pd.DataFrame(columns=["Player_ID", "Player", "Negotiations", "Fights", "Total", "season"])
-    df = pd.DataFrame(master["gbg"])
+    for col in ["Negotiations", "Fights", "Total"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
     df["Player_ID"] = df["Player_ID"].astype(str)
     return df
 
 
 def get_qi_df() -> pd.DataFrame:
-    master = load_master()
-    if not master["qi"]:
+    df = _load_csv_folder(QI_DIR)
+    if df.empty:
         return pd.DataFrame(columns=["Player_ID", "Player", "Actions", "Progress", "season"])
-    df = pd.DataFrame(master["qi"])
+    for col in ["Actions", "Progress"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
     df["Player_ID"] = df["Player_ID"].astype(str)
     return df
 
 
 def get_members_df() -> pd.DataFrame:
-    master = load_master()
-    if not master.get("members"):
+    df = _load_csv_folder(MEMBERS_DIR)
+    if df.empty:
         return pd.DataFrame(columns=["Player_ID", "Player", "points", "eraName", "guildgoods", "won_battles", "snapshot"])
-    df = pd.DataFrame(master["members"])
+    # Normalise column names if raw CSV used member_id/member
+    col_map = {}
+    if "member_id" in df.columns and "Player_ID" not in df.columns:
+        col_map["member_id"] = "Player_ID"
+    if "member" in df.columns and "Player" not in df.columns:
+        col_map["member"] = "Player"
+    if col_map:
+        df = df.rename(columns=col_map)
+    # season column becomes snapshot for members
+    if "season" in df.columns and "snapshot" not in df.columns:
+        df = df.rename(columns={"season": "snapshot"})
+    for col in ["points", "guildgoods", "won_battles"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+    if "rank" in df.columns:
+        df["rank"] = pd.to_numeric(df["rank"], errors="coerce").fillna(0).astype(int)
     df["Player_ID"] = df["Player_ID"].astype(str)
     return df
 
 
 def get_member_snapshots() -> list[str]:
-    master = load_master()
-    if not master.get("members"):
-        return []
     from modules.comparisons import sort_seasons
-    snaps = list({r["snapshot"] for r in master["members"]})
-    return sort_seasons(snaps, descending=True)
+    df = get_members_df()
+    if df.empty or "snapshot" not in df.columns:
+        return []
+    return sort_seasons(df["snapshot"].unique().tolist(), descending=True)
 
 
 def get_all_seasons() -> dict:
-    master = load_master()
     from modules.comparisons import sort_seasons
-    gbg_seasons  = sort_seasons(list({r["season"]   for r in master["gbg"]}))      if master["gbg"]              else []
-    qi_seasons   = sort_seasons(list({r["season"]   for r in master["qi"]}))       if master["qi"]               else []
-    mem_snaps    = sort_seasons(list({r["snapshot"] for r in master.get("members",[])}), descending=True) if master.get("members") else []
+    gbg_df  = get_gbg_df()
+    qi_df   = get_qi_df()
+    mem_df  = get_members_df()
+    gbg_seasons = sort_seasons(gbg_df["season"].unique().tolist())          if not gbg_df.empty and "season"   in gbg_df.columns  else []
+    qi_seasons  = sort_seasons(qi_df["season"].unique().tolist())           if not qi_df.empty  and "season"   in qi_df.columns   else []
+    mem_snaps   = sort_seasons(mem_df["snapshot"].unique().tolist(), descending=True) if not mem_df.empty and "snapshot" in mem_df.columns else []
     return {"gbg": gbg_seasons, "qi": qi_seasons, "members": mem_snaps}
 
 
+# ── Delete (removes the CSV file) ──────────────────────────────────────────
+
 def delete_season(section: str, season: str) -> str:
-    master = load_master()
-    key    = section.lower()
-    if key == "members":
-        before = len(master.get("members", []))
-        master["members"] = [r for r in master.get("members", []) if r.get("snapshot") != season]
-        removed = before - len(master["members"])
-    else:
-        before  = len(master[key])
-        master[key] = [r for r in master[key] if r.get("season") != season]
-        removed = before - len(master[key])
-    save_master(master)
-    return f"Removed {removed} records for {section} '{season}'"
+    folder_map = {"gbg": GBG_DIR, "qi": QI_DIR, "members": MEMBERS_DIR}
+    folder = folder_map.get(section.lower())
+    if not folder:
+        return f"Unknown section: {section}"
+    path = folder / _filename_from_season(season)
+    if path.exists():
+        path.unlink()
+        return f"Deleted {path.name}"
+    return f"File not found: {path.name}"
+
+
+# ── Legacy aliases so nothing else breaks ─────────────────────────────────
+import_gbg     = save_gbg_csv
+import_qi      = save_qi_csv
+import_members = save_members_csv
