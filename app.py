@@ -600,6 +600,8 @@ elif page == "👤 Player Profiles":
                     f'<div style="display:flex;gap:10px;margin-bottom:12px;">{"".join(wins_parts)}</div>',
                     unsafe_allow_html=True,
                 )
+
+            tab_gbg_p, tab_qi_p = st.tabs([
                 f"{'⚔️' if not gbg_icon() else ''} GBG History",
                 f"{'🌀' if not qi_icon() else ''} QI History",
             ])
