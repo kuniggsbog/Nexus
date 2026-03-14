@@ -580,24 +580,45 @@ if page == "🏴 Dashboard":
         with col_c:
             st.markdown(f'<div class="section-title">{gbg_icon()} Top 10 Avg Fights / Season</div>', unsafe_allow_html=True)
             avg_gbg = get_most_consistent_players(gbg_df, qi_df, "gbg")
-            if avg_gbg:
-                max_avg = avg_gbg[0]["score"] if avg_gbg else 1
-                def _avg_gbg_card(i, row):
-                    bar = int(row["score"] / max(max_avg,1) * 100)
-                    return _dash_card(i, row["player"], "Avg Fights", f"{row['avg']:.0f}",
-                                      "#FFD700", "Seasons", str(row.get("seasons","")), "#8A8D9A", bar)
-                _render_cards_with_expander(avg_gbg, _avg_gbg_card)
+            if not isinstance(avg_gbg, pd.DataFrame):
+                avg_gbg = pd.DataFrame()
+            if not avg_gbg.empty:
+                _avg_col_g = [c for c in avg_gbg.columns if "Avg" in c or "Fight" in c]
+                _avg_col_g = _avg_col_g[0] if _avg_col_g else avg_gbg.columns[1]
+                _score_col_g = [c for c in avg_gbg.columns if "Score" in c or "⭐" in c]
+                _score_col_g = _score_col_g[0] if _score_col_g else avg_gbg.columns[-1]
+                _max_g = avg_gbg.index[0] if not avg_gbg.empty else 1
+                for i, (_, row) in enumerate(avg_gbg.reset_index(drop=True).iterrows()):
+                    _sc = str(row.get(_score_col_g, "")).replace(",","")
+                    _sc_int = int(float(_sc)) if _sc else 1
+                    _max_sc = int(float(str(avg_gbg[_score_col_g].iloc[0]).replace(",",""))) if not avg_gbg.empty else 1
+                    bar = int(_sc_int / max(_max_sc, 1) * 100)
+                    st.markdown(_dash_card(i, row["Player"], "Avg Fights",
+                                str(row.get(_avg_col_g, "")), "#FFD700",
+                                "Seasons", str(row.get("Seasons", "")), "#8A8D9A", bar),
+                                unsafe_allow_html=True)
+                if len(avg_gbg) > 3:
+                    pass  # already showing all 10, expander not needed for this section
 
         with col_d:
             st.markdown(f'<div class="section-title">{qi_icon()} Top 10 Avg Progress / Season</div>', unsafe_allow_html=True)
             avg_qi = get_most_consistent_players(gbg_df, qi_df, "qi")
-            if avg_qi:
-                max_avg_q = avg_qi[0]["score"] if avg_qi else 1
-                def _avg_qi_card(i, row):
-                    bar = int(row["score"] / max(max_avg_q,1) * 100)
-                    return _dash_card(i, row["player"], "Avg Progress", f"{row['avg']:.0f}",
-                                      "#9B59B6", "Seasons", str(row.get("seasons","")), "#8A8D9A", bar)
-                _render_cards_with_expander(avg_qi, _avg_qi_card)
+            if not isinstance(avg_qi, pd.DataFrame):
+                avg_qi = pd.DataFrame()
+            if not avg_qi.empty:
+                _avg_col_q = [c for c in avg_qi.columns if "Avg" in c or "Progress" in c]
+                _avg_col_q = _avg_col_q[0] if _avg_col_q else avg_qi.columns[1]
+                _score_col_q = [c for c in avg_qi.columns if "Score" in c or "⭐" in c]
+                _score_col_q = _score_col_q[0] if _score_col_q else avg_qi.columns[-1]
+                for i, (_, row) in enumerate(avg_qi.reset_index(drop=True).iterrows()):
+                    _sc = str(row.get(_score_col_q, "")).replace(",","")
+                    _sc_int = int(float(_sc)) if _sc else 1
+                    _max_sc = int(float(str(avg_qi[_score_col_q].iloc[0]).replace(",",""))) if not avg_qi.empty else 1
+                    bar = int(_sc_int / max(_max_sc, 1) * 100)
+                    st.markdown(_dash_card(i, row["Player"], "Avg Progress",
+                                str(row.get(_avg_col_q, "")), "#9B59B6",
+                                "Seasons", str(row.get("Seasons", "")), "#8A8D9A", bar),
+                                unsafe_allow_html=True)
 
         st.markdown("---")
 
