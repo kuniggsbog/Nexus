@@ -338,27 +338,7 @@ with st.sidebar:
             _sidebar_pill_list("💤", "Inactive (0 Fights)",          "#8A8D9A", names=_inactive_players)
         st.markdown("---")
 
-    # ── Player quick-jump ─────────────────────────────────────────────────
-    _all_players = get_all_players(_gbg_tmp, _qi_tmp, _members_tmp)
-    _current     = _all_players.get("current", pd.DataFrame())
-    if not _current.empty and "Player" in _current.columns:
-        st.markdown(
-            f'<div style="color:#8A8D9A;font-size:0.72rem;text-transform:uppercase;'
-            f'letter-spacing:1px;margin-bottom:6px;">Quick Jump to Player</div>',
-            unsafe_allow_html=True,
-        )
-        _player_names = ["—"] + sorted(_current["Player"].dropna().tolist())
-        _jump = st.selectbox("Player", _player_names, label_visibility="collapsed", key="sidebar_jump")
-        if _jump != "—":
-            st.session_state["profile_jump"] = _jump
-            st.session_state["nav_radio"]    = "👤 Player Profiles"
-            st.session_state["sidebar_jump"] = "—"
-            st.rerun()
 
-
-# ── Patch radio labels to include icons ───────────────────────────────────
-# (Streamlit sidebar radio doesn't render HTML, so we use emoji fallbacks
-#  and display the real icons in page headings instead)
 
 # ── Load data ──────────────────────────────────────────────────────────────
 gbg_df     = get_gbg_df()
@@ -1096,10 +1076,6 @@ elif page == "🌀 QI":
 elif page == "👤 Player Profiles":
     st.title("👤 Player Profiles")
 
-    # Handle sidebar quick-jump
-    _jump_name = st.session_state.pop("profile_jump", None)
-    st.session_state.pop("force_profiles", None)
-
     players = get_all_players(gbg_df, qi_df, members_df)
     current_players = players["current"]
     former_players  = players["former"]
@@ -1149,7 +1125,7 @@ elif page == "👤 Player Profiles":
         _sel_letter = st.session_state["pp_letter"]
 
         # Name search (still available for typing)
-        default_search = _jump_name if _jump_name else ""
+        default_search = ""
         search = st.text_input("🔍 Search by name", value=default_search,
                                placeholder="Type a name...", label_visibility="collapsed")
 
