@@ -1344,7 +1344,10 @@ elif page == "👤 Player Profiles":
                     st.markdown('<div class="section-title">📅 Season History</div>', unsafe_allow_html=True)
                     _gh = hide_pid(gbg_hist)
                     if "season" in _gh.columns and "Fights" in _gh.columns:
-                        _gh_sorted = _gh.sort_values("season", ascending=False).reset_index(drop=True)
+                        from modules.comparisons import sort_seasons as _ss_gh
+                        _gh_order  = _ss_gh(_gh["season"].tolist(), descending=True)
+                        _gh_sorted = _gh.set_index("season").reindex(_gh_order).reset_index()
+                        _gh_sorted = _gh_sorted.dropna(subset=["Fights"]).reset_index(drop=True)
                         _max_fights = _gh_sorted["Fights"].max() if not _gh_sorted.empty else 1
                         for _, _row in _gh_sorted.iterrows():
                             _f  = int(_row.get("Fights", 0))
@@ -1397,7 +1400,10 @@ elif page == "👤 Player Profiles":
                     st.markdown('<div class="section-title">📅 Season History</div>', unsafe_allow_html=True)
                     _qh = hide_pid(qi_hist)
                     if "season" in _qh.columns and "Progress" in _qh.columns:
-                        _qh_sorted = _qh.sort_values("season", ascending=False).reset_index(drop=True)
+                        from modules.comparisons import sort_seasons as _ss_qh
+                        _qh_order  = _ss_qh(_qh["season"].tolist(), descending=True)
+                        _qh_sorted = _qh.set_index("season").reindex(_qh_order).reset_index()
+                        _qh_sorted = _qh_sorted.dropna(subset=["Progress"]).reset_index(drop=True)
                         _max_prog  = _qh_sorted["Progress"].max() if not _qh_sorted.empty else 1
                         for _, _row in _qh_sorted.iterrows():
                             _p  = int(_row.get("Progress", 0))
