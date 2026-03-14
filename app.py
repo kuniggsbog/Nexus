@@ -189,7 +189,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.markdown("---")
-    _nav_default = ["🏴 Dashboard", "⚔️ GBG", "🌀 QI", "👤 Player Profiles", "📊 Metrics", "🏆 Hall of Fame", "📥 Data Import"]
+    _nav_default = ["🏴 Dashboard", "⚔️ GBG", "🌀 QI", "👤 Player Profiles", "📊 Metrics", "🏆 Hall of Fame", "⚠️ Guild Minimums", "📥 Data Import"]
     page = st.radio(
         "Navigate",
         _nav_default,
@@ -1958,3 +1958,153 @@ elif page == "🏆 Hall of Fame":
                 </div>""", unsafe_allow_html=True)
         else:
             st.info("No streak data yet.")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# PAGE: GUILD MINIMUMS
+# ══════════════════════════════════════════════════════════════════════════
+elif page == "⚠️ Guild Minimums":
+    st.markdown("# ⚠️ Guild Minimums")
+    st.markdown(
+        '<div style="color:#8A8D9A;font-size:0.88rem;margin-bottom:20px;">'
+        'Players with <b>more than 2 seasons</b> below the guild minimum. '
+        'GBG minimum: <span style="color:#F39C12;font-weight:700;">1,000 fights</span> · '
+        'QI minimum: <span style="color:#E67E22;font-weight:700;">3,500 progress</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    def _minimums_section(df, value_col, min_val, section_colour, section_label, season_label, icon):
+        """Render top-10 offenders card list for one activity type."""
+        st.markdown(f'<div class="section-title">{icon} {section_label} — Minimum {min_val:,}</div>',
+                    unsafe_allow_html=True)
+        if df.empty:
+            st.info("No data yet.")
+            return
+
+        from modules.comparisons import sort_seasons as _ssm
+        _seasons_m  = _ssm(df["season"].unique().tolist())
+        _latest_m   = _seasons_m[-1]
+        _curr_pids_m = set(df[df["season"] == _latest_m]["Player_ID"].astype(str))
+        _df_curr    = df[df["Player_ID"].astype(str).isin(_curr_pids_m)].copy()
+
+        # Count seasons below minimum per player
+        _below = (
+            _df_curr[_df_curr[value_col] < min_val]
+            .groupby(["Player_ID", "Player"])
+            .agg(
+                seasons_below=(value_col, "count"),
+                avg_value=(value_col, "mean"),
+                min_value=(value_col, "min"),
+                worst_season=("season", lambda s: _df_curr.loc[s.index].loc[
+                    _df_curr.loc[s.index, value_col].idxmin(), "season"
+                ]),
+            )
+            .reset_index()
+            .query("seasons_below > 2")
+            .sort_values("seasons_below", ascending=False)
+            .head(10)
+            .reset_index(drop=True)
+        )
+
+        if _below.empty:
+            st.markdown(
+                f'<div style="background:#1A3A1A;border:1px solid #2A4A2A;border-radius:10px;'
+                f'padding:14px 18px;color:#2ECC71;font-weight:600;">✅ No current players have '
+                f'more than 2 seasons below the {section_label} minimum.</div>',
+                unsafe_allow_html=True,
+            )
+            return
+
+        _max_below = int(_below["seasons_below"].iloc[0])
+        _total_seasons = len(_seasons_m)
+
+        for _i, (_, _r) in enumerate(_below.iterrows()):
+            _medal   = {0:"🥇",1:"🥈",2:"🥉"}.get(_i, f"#{_i+1}")
+            _cnt     = int(_r["seasons_below"])
+            _avg     = int(_r["avg_value"])
+            _worst_s = str(_r["worst_season"])
+            _bar_w   = int(_cnt / max(_max_below, 1) * 100)
+            _pct_seasons = int(_cnt / max(_total_seasons, 1) * 100)
+
+            # Get current season value for this player
+            _pid_str  = str(_r["Player_ID"])
+            _curr_val = df[(df["Player_ID"].astype(str) == _pid_str) &
+                           (df["season"] == _latest_m)][value_col].sum()
+            _curr_val = int(_curr_val)
+            _is_curr_below = _curr_val < min_val and _curr_val > 0
+            _curr_badge = (
+                f'<span style="background:#3A1A1A;color:#E74C3C;padding:2px 8px;'
+                f'border-radius:12px;font-size:0.72rem;font-weight:700;margin-left:6px;">'
+                f'⚠️ {_curr_val:,} this season</span>'
+            ) if _is_curr_below else (
+                f'<span style="background:#1A3A1A;color:#2ECC71;padding:2px 8px;'
+                f'border-radius:12px;font-size:0.72rem;font-weight:700;margin-left:6px;">'
+                f'✅ {_curr_val:,} this season</span>'
+            ) if _curr_val > 0 else ""
+
+            # Per-season mini breakdown for this player
+            _player_seasons = _df_curr[_df_curr["Player_ID"].astype(str) == _pid_str].sort_values("season")
+            _season_bars = ""
+            for _, _ps in _player_seasons.iterrows():
+                _sv   = int(_ps[value_col])
+                _sc   = "#2ECC71" if _sv >= min_val else "#E74C3C"
+                _sw   = int(_sv / max(min_val * 1.5, 1) * 100)
+                _sw   = min(_sw, 100)
+                _season_bars += (
+                    f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">'
+                    f'<div style="color:#5A5D6A;font-size:0.68rem;min-width:110px;white-space:nowrap;">'
+                    f'{str(_ps["season"])[:14]}</div>'
+                    f'<div style="flex:1;background:#0E1117;border-radius:3px;height:6px;">'
+                    f'<div style="background:{_sc};width:{_sw}%;height:6px;border-radius:3px;"></div></div>'
+                    f'<div style="color:{_sc};font-size:0.72rem;font-weight:700;min-width:50px;'
+                    f'text-align:right;">{_sv:,}</div>'
+                    f'</div>'
+                )
+
+            st.markdown(f"""
+            <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:12px;
+                        padding:16px 20px;margin-bottom:10px;">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
+                <div>
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <span style="font-size:1.2rem;">{_medal}</span>
+                    <span style="color:#E8E8E8;font-weight:800;font-size:1.05rem;">{_r['Player']}</span>
+                    {_curr_badge}
+                  </div>
+                  <div style="margin-top:6px;display:flex;gap:20px;flex-wrap:wrap;">
+                    <div>
+                      <span style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;">Seasons below</span>
+                      <span style="color:#E74C3C;font-weight:800;font-size:1rem;margin-left:6px;">{_cnt}</span>
+                      <span style="color:#5A5D6A;font-size:0.72rem;"> / {_total_seasons} total ({_pct_seasons}%)</span>
+                    </div>
+                    <div>
+                      <span style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;">Avg when below</span>
+                      <span style="color:#F39C12;font-weight:700;font-size:0.9rem;margin-left:6px;">{_avg:,}</span>
+                    </div>
+                    <div>
+                      <span style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;">Worst season</span>
+                      <span style="color:#8A8D9A;font-size:0.82rem;margin-left:6px;">{_worst_s}</span>
+                    </div>
+                  </div>
+                </div>
+                <div style="text-align:right;min-width:60px;">
+                  <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Offence rate</div>
+                  <div style="color:#E74C3C;font-weight:800;font-size:1.3rem;">{_pct_seasons}%</div>
+                </div>
+              </div>
+              <div style="background:#0E1117;border-radius:4px;height:4px;margin-bottom:12px;">
+                <div style="background:#E74C3C;width:{_bar_w}%;height:4px;border-radius:4px;"></div>
+              </div>
+              <div style="border-top:1px solid #2A2D3A;padding-top:10px;">
+                <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;
+                            letter-spacing:0.5px;margin-bottom:6px;">Season breakdown</div>
+                {_season_bars}
+              </div>
+            </div>""", unsafe_allow_html=True)
+
+    _min_gbg_col, _min_qi_col = st.columns(2)
+    with _min_gbg_col:
+        _minimums_section(gbg_df, "Fights",   1000, "#F39C12", "GBG Fights",   "GBG",  "⚔️")
+    with _min_qi_col:
+        _minimums_section(qi_df,  "Progress", 3500, "#E67E22", "QI Progress",  "QI",   "🌀")
