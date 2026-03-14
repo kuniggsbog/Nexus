@@ -1143,59 +1143,166 @@ elif page == "👤 Player Profiles":
         def render_player_grid(df, is_former=False):
             if df.empty:
                 return
+
+            # Era colour map
+            _era_colours = {
+                "SAAB": "#E74C3C", "SASH": "#9B59B6", "CATH": "#3498DB",
+                "INDU": "#E67E22", "PROG": "#2ECC71", "CONT": "#F39C12",
+                "GILD": "#FFD700", "VIRT": "#1ABC9C", "OCEA": "#2980B9",
+                "TOMO": "#8E44AD", "FUTU": "#16A085",
+            }
+
+            # Pre-compute latest GBG and QI season names for activity lookup
+            from modules.comparisons import sort_seasons as _ss_grid
+            _latest_gbg_s = _ss_grid(gbg_df["season"].unique().tolist())[-1] if not gbg_df.empty else None
+            _latest_qi_s  = _ss_grid(qi_df["season"].unique().tolist())[-1]  if not qi_df.empty  else None
+
             cols_per_row = 2
             for i in range(0, len(df), cols_per_row):
                 row_df = df.iloc[i:i+cols_per_row]
                 cols = st.columns(cols_per_row)
                 for col, (_, prow) in zip(cols, row_df.iterrows()):
                     with col:
-                        pid = str(prow["Player_ID"])
-                        has_gbg = not gbg_df.empty and pid in gbg_df["Player_ID"].values
-                        has_qi  = not qi_df.empty  and pid in qi_df["Player_ID"].values
-                        badges = ""
-                        if has_gbg: badges += '<span class="badge-gbg">GBG</span> '
-                        if has_qi:  badges += '<span class="badge-qi">QI</span>'
+                        pid     = str(prow["Player_ID"])
+                        has_gbg = not gbg_df.empty and pid in gbg_df["Player_ID"].astype(str).values
+                        has_qi  = not qi_df.empty  and pid in qi_df["Player_ID"].astype(str).values
 
-                        avatar_html = get_avatar_html(prow["Player"], size=64)
-                        name_class  = "player-name-former" if is_former else "player-name"
-                        card_class  = "player-card-former" if is_former else "player-card"
+                        avatar_html = get_avatar_html(prow["Player"], size=68)
                         former_tag  = '<span class="former-badge">LEFT GUILD</span>' if is_former else ""
 
-                        mem = get_latest_member_stats(members_df, pid)
-                        stats_html = ""
-                        if mem:
-                            pts  = f"{mem['points']:,}"
-                            era  = mem['eraName']
-                            wb   = f"{mem['won_battles']:,}"
-                            gg   = f"{mem['guildgoods']:,}"
-                            stats_html = (
-                                f'<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;">'
-                                f'<span style="color:#FFD700;font-size:0.92rem;font-weight:700;">🏅 {pts}</span>'
-                                f'<span style="color:#8A8D9A;font-size:0.88rem;">· {era}</span>'
-                                f'</div>'
-                                f'<div style="margin-top:5px;display:flex;gap:16px;">'
-                                f'<span style="color:#2ECC71;font-size:0.85rem;">⚔️ {wb} battles</span>'
-                                f'<span style="color:#4A90D9;font-size:0.85rem;">📦 {gg} goods</span>'
-                                f'</div>'
-                            )
+                        # Member stats
+                        mem      = get_latest_member_stats(members_df, pid)
+                        pts      = mem.get("points", 0)       if mem else 0
+                        era      = mem.get("eraName", "")     if mem else ""
+                        wb       = mem.get("won_battles", 0)  if mem else 0
+                        gg       = mem.get("guildgoods", 0)   if mem else 0
+                        rank_num = mem.get("rank", 0)         if mem else 0
 
+                        # Season wins
                         wins_row = wins_df[wins_df["Player_ID"] == pid] if not wins_df.empty else pd.DataFrame()
                         gbg_wins = int(wins_row["gbg_wins"].iloc[0]) if not wins_row.empty else 0
                         qi_wins  = int(wins_row["qi_wins"].iloc[0])  if not wins_row.empty else 0
-                        medals = ""
+
+                        # Latest season activity
+                        _last_fights = 0
+                        _last_qi     = 0
+                        if _latest_gbg_s:
+                            _f_row = gbg_df[(gbg_df["Player_ID"].astype(str) == pid) &
+                                            (gbg_df["season"] == _latest_gbg_s)]
+                            _last_fights = int(_f_row["Fights"].sum()) if not _f_row.empty else 0
+                        if _latest_qi_s:
+                            _q_row = qi_df[(qi_df["Player_ID"].astype(str) == pid) &
+                                           (qi_df["season"] == _latest_qi_s)]
+                            _last_qi = int(_q_row["Progress"].sum()) if not _q_row.empty else 0
+
+                        # Status strip colour
+                        _gbg_ok = _last_fights >= 1000 or not has_gbg
+                        _qi_ok  = _last_qi >= 3500    or not has_qi
+                        if _gbg_ok and _qi_ok:
+                            _strip_col = "#2ECC71"
+                        elif _gbg_ok or _qi_ok:
+                            _strip_col = "#F39C12"
+                        else:
+                            _strip_col = "#E74C3C"
+                        if is_former:
+                            _strip_col = "#3A3D4A"
+
+                        # Era pill
+                        _era_col   = _era_colours.get(era[:4].upper(), "#4A90D9") if era else "#4A90D9"
+                        _era_pill  = (
+                            f'<span style="background:{_era_col}22;color:{_era_col};'
+                            f'border:1px solid {_era_col}55;padding:1px 8px;border-radius:20px;'
+                            f'font-size:0.72rem;font-weight:700;">{era}</span>'
+                        ) if era else ""
+
+                        # Rank badge
+                        _rank_badge = (
+                            f'<span style="background:#0E1117;color:#8A8D9A;'
+                            f'border:1px solid #2A2D3A;padding:1px 7px;border-radius:20px;'
+                            f'font-size:0.72rem;font-weight:600;">#{rank_num}</span>'
+                        ) if rank_num else ""
+
+                        # Medal badges
+                        _medal_html = ""
                         if gbg_wins > 0:
-                            medals += f'<span style="color:#FFD700;font-size:0.82rem;font-weight:700;margin-left:8px;">🥇{gbg_wins}× GBG</span>'
+                            _medal_html += f'<span style="background:#2A2000;color:#FFD700;padding:2px 7px;border-radius:20px;font-size:0.72rem;font-weight:700;">🥇{gbg_wins}×GBG</span> '
                         if qi_wins > 0:
-                            medals += f'<span style="color:#C0C0C0;font-size:0.82rem;font-weight:700;margin-left:6px;">🥇{qi_wins}× QI</span>'
+                            _medal_html += f'<span style="background:#1A1A2A;color:#C0C0C0;padding:2px 7px;border-radius:20px;font-size:0.72rem;font-weight:700;">🥇{qi_wins}×QI</span>'
+
+                        # Activity badges (last season)
+                        _act_gbg = ""
+                        _act_qi  = ""
+                        if has_gbg and _latest_gbg_s:
+                            _fc = "#2ECC71" if _last_fights >= 1000 else "#E74C3C"
+                            _act_gbg = (
+                                f'<div style="text-align:center;">'
+                                f'<div style="color:#8A8D9A;font-size:0.6rem;text-transform:uppercase;'
+                                f'letter-spacing:0.5px;">GBG</div>'
+                                f'<div style="color:{_fc};font-weight:800;font-size:0.88rem;">{_last_fights:,}</div>'
+                                f'</div>'
+                            )
+                        if has_qi and _latest_qi_s:
+                            _qc = "#9B59B6" if _last_qi >= 3500 else "#E74C3C"
+                            _act_qi = (
+                                f'<div style="text-align:center;">'
+                                f'<div style="color:#8A8D9A;font-size:0.6rem;text-transform:uppercase;'
+                                f'letter-spacing:0.5px;">QI</div>'
+                                f'<div style="color:{_qc};font-weight:800;font-size:0.88rem;">{_last_qi:,}</div>'
+                                f'</div>'
+                            )
+
+                        _card_bg  = "#161820" if is_former else "#1A1D27"
+                        _card_bdr = "#3A2A2A" if is_former else "#2A2D3A"
+                        _opacity  = "opacity:0.78;" if is_former else ""
+                        _name_col = "#8A8D9A" if is_former else "#F0F0F0"
 
                         st.markdown(f"""
-                        <div class="{card_class}">
-                          <div style="display:flex;align-items:flex-start;gap:16px;">
-                            {avatar_html}
-                            <div style="flex:1;min-width:0;">
-                              <div class="{name_class}" style="font-size:1.12rem;">{prow['Player']}{former_tag}{medals}</div>
-                              <div style="margin-top:5px;">{badges}</div>
-                              {stats_html}
+                        <div style="background:{_card_bg};border:1px solid {_card_bdr};
+                                    border-radius:14px;margin-bottom:10px;overflow:hidden;
+                                    transition:border-color 0.2s;{_opacity}
+                                    box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+                          <!-- Status strip -->
+                          <div style="height:4px;background:{_strip_col};width:100%;"></div>
+                          <div style="padding:16px 18px;">
+                            <!-- Header row: avatar + name block + rank -->
+                            <div style="display:flex;align-items:flex-start;gap:14px;">
+                              {avatar_html}
+                              <div style="flex:1;min-width:0;">
+                                <!-- Name + former tag -->
+                                <div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:5px;">
+                                  <span style="color:{_name_col};font-weight:800;font-size:1.08rem;
+                                               line-height:1.2;">{prow['Player']}</span>
+                                  {former_tag}
+                                </div>
+                                <!-- Era + rank + medals row -->
+                                <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
+                                  {_era_pill}{_rank_badge}{_medal_html}
+                                </div>
+                                <!-- Dominant stat: points -->
+                                {'<div style="color:#FFD700;font-size:1.5rem;font-weight:900;line-height:1;margin-bottom:4px;">' + f"{pts:,}" + '<span style="color:#8A8D9A;font-size:0.7rem;font-weight:400;margin-left:4px;">pts</span></div>' if pts else ""}
+                              </div>
+                              <!-- Rank badge top-right -->
+                              <div style="text-align:right;min-width:32px;">
+                                {'<div style="color:#5A5D6A;font-size:0.78rem;font-weight:700;">#' + str(rank_num) + '</div>' if rank_num else ""}
+                              </div>
+                            </div>
+                            <!-- Secondary stats row -->
+                            <div style="display:flex;gap:16px;margin-top:6px;padding-top:10px;
+                                        border-top:1px solid {_card_bdr};">
+                              <div style="flex:1;display:flex;gap:16px;flex-wrap:wrap;">
+                                <div>
+                                  <div style="color:#8A8D9A;font-size:0.6rem;text-transform:uppercase;letter-spacing:0.5px;">Battles</div>
+                                  <div style="color:#2ECC71;font-weight:700;font-size:0.82rem;">{wb:,}</div>
+                                </div>
+                                <div>
+                                  <div style="color:#8A8D9A;font-size:0.6rem;text-transform:uppercase;letter-spacing:0.5px;">Goods</div>
+                                  <div style="color:#4A90D9;font-weight:700;font-size:0.82rem;">{gg:,}</div>
+                                </div>
+                              </div>
+                              <!-- Last season activity -->
+                              <div style="display:flex;gap:14px;">
+                                {_act_gbg}{_act_qi}
+                              </div>
                             </div>
                           </div>
                         </div>
