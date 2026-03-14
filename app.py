@@ -1910,12 +1910,12 @@ elif page == "📊 Metrics":
 elif page == "🏆 Hall of Fame":
     st.markdown("# 🏆 Hall of Fame")
 
-    # ── Helper to render a ranked card list ──────────────────────────────
+    # ── Helper: render one ranked card ───────────────────────────────────
     def _hof_card(rank, name, primary_val, primary_label, primary_colour,
                   sub_lines=None, bar_pct=100):
-        medal    = {1:"🥇", 2:"🥈", 3:"🥉"}.get(rank, f"#{rank}")
-        bar_col  = "#FFD700" if rank==1 else "#C0C0C0" if rank==2 else "#CD7F32" if rank==3 else "#4A90D9"
-        subs     = "".join(
+        medal   = {1:"🥇", 2:"🥈", 3:"🥉"}.get(rank, f"#{rank}")
+        bar_col = "#FFD700" if rank==1 else "#C0C0C0" if rank==2 else "#CD7F32" if rank==3 else "#4A90D9"
+        subs    = "".join(
             f'<div style="color:#8A8D9A;font-size:0.75rem;margin-top:3px;">{l}</div>'
             for l in (sub_lines or [])
         )
@@ -1939,6 +1939,19 @@ elif page == "🏆 Hall of Fame":
           </div>
         </div>""", unsafe_allow_html=True)
 
+    # ── Helper: render top-3 visible, rest in expander ───────────────────
+    def _hof_section(rows, render_fn, empty_msg="No data yet."):
+        """rows: list of dicts. render_fn(rank, row) calls _hof_card."""
+        if not rows:
+            st.info(empty_msg)
+            return
+        for rank, row in enumerate(rows[:3], 1):
+            render_fn(rank, row)
+        if len(rows) > 3:
+            with st.expander(f"Show more ({len(rows) - 3} more)"):
+                for rank, row in enumerate(rows[3:], 4):
+                    render_fn(rank, row)
+
     # ── Compute current player set ────────────────────────────────────────
     if not gbg_df.empty:
         from modules.comparisons import sort_seasons as _ss_hof
@@ -1954,17 +1967,14 @@ elif page == "🏆 Hall of Fame":
     with row1_col1:
         st.markdown('<div class="section-title">🏆 All-Time #1 Finishers</div>', unsafe_allow_html=True)
         hof_data = get_hall_of_fame(gbg_df, qi_df)
-        if hof_data:
-            _max_hof = hof_data[0]["total"] if hof_data else 1
-            for rank, row in enumerate(hof_data, 1):
-                gbg_b = f'⚔️ {row["gbg_wins"]}× GBG' if row["gbg_wins"] else ""
-                qi_b  = f'🌀 {row["qi_wins"]}× QI'   if row["qi_wins"]  else ""
-                subs  = [s for s in [gbg_b, qi_b] if s]
-                _hof_card(rank, row["player"], f'{row["total"]} 🥇', "Season Wins",
-                          "#FFD700", sub_lines=subs,
-                          bar_pct=int(row["total"] / max(_max_hof, 1) * 100))
-        else:
-            st.info("No season winners recorded yet.")
+        _max_hof = hof_data[0]["total"] if hof_data else 1
+        def _render_hof(rank, row):
+            gbg_b = f'⚔️ {row["gbg_wins"]}× GBG' if row["gbg_wins"] else ""
+            qi_b  = f'🌀 {row["qi_wins"]}× QI'   if row["qi_wins"]  else ""
+            _hof_card(rank, row["player"], f'{row["total"]} 🥇', "Season Wins", "#FFD700",
+                      sub_lines=[s for s in [gbg_b, qi_b] if s],
+                      bar_pct=int(row["total"] / max(_max_hof, 1) * 100))
+        _hof_section(hof_data, _render_hof, "No season winners recorded yet.")
 
     with row1_col2:
         st.markdown('<div class="section-title">🛡️ Iron Player</div>', unsafe_allow_html=True)
@@ -2005,14 +2015,14 @@ elif page == "🏆 Hall of Fame":
                 reverse=True
             )[:10]
             _max_iron = _iron_rows[0]["seasons"] if _iron_rows else 1
-            for rank, row in enumerate(_iron_rows, 1):
-                _hof_card(rank, row["player"], str(row["seasons"]), "Both Rounds",
-                          "#4A90D9",
+            def _render_iron(rank, row):
+                _hof_card(rank, row["player"], str(row["seasons"]), "Both Rounds", "#4A90D9",
                           sub_lines=[
                               f'⚔️ {row["gbg_seasons"]} GBG · 🌀 {row["qi_seasons"]} QI seasons',
                               f'Total: {row["total_fights"]:,} fights · {row["total_progress"]:,} progress',
                           ],
                           bar_pct=int(row["seasons"] / max(_max_iron, 1) * 100))
+            _hof_section(_iron_rows, _render_iron)
 
     st.markdown("---")
 
@@ -2045,11 +2055,11 @@ elif page == "🏆 Hall of Fame":
                             _dt["total_progress"] / _p_max * 50)
             _dt = _dt.sort_values("score", ascending=False).head(10).reset_index(drop=True)
             _max_score = _dt["score"].iloc[0] if not _dt.empty else 1
-            for rank, (_, row) in enumerate(_dt.iterrows(), 1):
-                _hof_card(rank, row["Player"],
-                          f'{row["score"]:.0f} pts', "Combined Score", "#9B59B6",
+            def _render_dt(rank, row):
+                _hof_card(rank, row["Player"], f'{row["score"]:.0f} pts', "Combined Score", "#9B59B6",
                           sub_lines=[f'⚔️ {int(row["total_fights"]):,} fights · 🌀 {int(row["total_progress"]):,} progress'],
                           bar_pct=int(row["score"] / max(_max_score, 1) * 100))
+            _hof_section(_dt.to_dict("records"), _render_dt)
 
     with row2_col2:
         st.markdown('<div class="section-title">👑 Guild MVP</div>', unsafe_allow_html=True)
@@ -2089,14 +2099,146 @@ elif page == "🏆 Hall of Fame":
             )
             _mvp = _mvp.sort_values("score", ascending=False).head(10).reset_index(drop=True)
             _max_mvp = _mvp["score"].iloc[0]
-            for rank, (_, row) in enumerate(_mvp.iterrows(), 1):
-                _hof_card(rank, row["player"],
-                          f'{row["score"]:.0f} pts', "MVP Score", "#FFD700",
+            def _render_mvp(rank, row):
+                _hof_card(rank, row["player"], f'{row["score"]:.0f} pts', "MVP Score", "#FFD700",
                           sub_lines=[
                               f'⚔️ {int(row["fights"]):,} fights · 🌀 {int(row["progress"]):,} QI',
                               f'🏅 {int(row["points"]):,} pts · 📦 {int(row["goods"]):,} goods',
                           ],
                           bar_pct=int(row["score"] / max(_max_mvp, 1) * 100))
+            _hof_section(_mvp.to_dict("records"), _render_mvp)
+
+    st.markdown("---")
+
+    # ── Row 3: Century Club + Elite Fighter + QI Legend ──────────────────
+    row3_col1, row3_col2, row3_col3 = st.columns(3)
+
+    with row3_col1:
+        st.markdown('<div class="section-title">💯 Century Club</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="color:#8A8D9A;font-size:0.75rem;margin-bottom:10px;">'
+            'Players who\'ve crossed lifetime fight milestones</div>',
+            unsafe_allow_html=True)
+        if gbg_df.empty:
+            st.info("No GBG data yet.")
+        else:
+            _cc_totals = (
+                gbg_df[gbg_df["Player_ID"].astype(str).isin(_hof_curr_pids)]
+                .groupby(["Player_ID", "Player"])["Fights"]
+                .sum().reset_index()
+                .rename(columns={"Fights": "total_fights"})
+                .sort_values("total_fights", ascending=False)
+                .reset_index(drop=True)
+            )
+
+            def _milestone_badge(v):
+                if v >= 1_000_000:
+                    return "1M+ 🌟", "#FFD700"
+                elif v >= 500_000:
+                    return "500K+ 💎", "#9B59B6"
+                elif v >= 100_000:
+                    return "100K+ 🔥", "#E74C3C"
+                else:
+                    return None, None
+
+            _cc_shown = _cc_totals[_cc_totals["total_fights"] >= 100_000].reset_index(drop=True)
+            if _cc_shown.empty:
+                st.info("No players have reached 100,000 lifetime fights yet.")
+            else:
+                def _render_cc(rank, row):
+                    _tf = int(row["total_fights"])
+                    _badge, _badge_col = _milestone_badge(_tf)
+                    if _tf >= 1_000_000:
+                        _next, _prev = None, 1_000_000
+                    elif _tf >= 500_000:
+                        _next, _prev = 1_000_000, 500_000
+                    else:
+                        _next, _prev = 500_000, 100_000
+                    _prog_to_next = int((_tf - _prev) / max((_next or _tf) - _prev, 1) * 100) if _next else 100
+                    _next_label   = f"→ {_next//1000}K" if _next else "✅ Max tier"
+                    _cc_medal     = {1:"🥇",2:"🥈",3:"🥉"}.get(rank, f"#{rank}")
+                    st.markdown(f"""
+                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:12px;
+                                padding:14px 18px;margin-bottom:8px;">
+                      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                        <div style="font-size:1.3rem;min-width:30px;">{_cc_medal}</div>
+                        <div style="flex:1;">
+                          <div style="color:#E8E8E8;font-weight:800;font-size:0.95rem;">{row["Player"]}</div>
+                          <div style="color:#8A8D9A;font-size:0.75rem;margin-top:2px;">{_tf:,} lifetime fights</div>
+                        </div>
+                        <div style="background:#0E1117;border-radius:20px;padding:4px 10px;">
+                          <span style="color:{_badge_col};font-weight:800;font-size:0.85rem;">{_badge}</span>
+                        </div>
+                      </div>
+                      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                        <div style="color:#5A5D6A;font-size:0.68rem;">Progress to next tier</div>
+                        <div style="color:#5A5D6A;font-size:0.68rem;">{_next_label}</div>
+                      </div>
+                      <div style="background:#0E1117;border-radius:4px;height:5px;">
+                        <div style="background:{_badge_col};width:{_prog_to_next}%;height:5px;border-radius:4px;"></div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
+                _hof_section(_cc_shown.to_dict("records"), _render_cc)
+
+    with row3_col2:
+        st.markdown('<div class="section-title">⚔️ Elite Fighter</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="color:#8A8D9A;font-size:0.75rem;margin-bottom:10px;">'
+            'Most seasons with 5,000+ GBG fights</div>',
+            unsafe_allow_html=True)
+        if gbg_df.empty:
+            st.info("No GBG data yet.")
+        else:
+            _ef = (
+                gbg_df[gbg_df["Player_ID"].astype(str).isin(_hof_curr_pids)]
+                [gbg_df["Fights"] >= 5000]
+                .groupby(["Player_ID", "Player"])
+                .agg(elite_seasons=("Fights", "count"),
+                     best_season=("Fights", "max"))
+                .reset_index()
+                .sort_values(["elite_seasons", "best_season"], ascending=False)
+                .head(10).reset_index(drop=True)
+            )
+            if _ef.empty:
+                st.info("No players have 5,000+ fights in a season yet.")
+            else:
+                _max_ef = int(_ef["elite_seasons"].iloc[0])
+                def _render_ef(rank, row):
+                    _hof_card(rank, row["Player"], str(int(row["elite_seasons"])), "Elite Seasons", "#FFD700",
+                              sub_lines=[f'Best season: {int(row["best_season"]):,} fights'],
+                              bar_pct=int(int(row["elite_seasons"]) / max(_max_ef, 1) * 100))
+                _hof_section(_ef.to_dict("records"), _render_ef,
+                             "No players have 5,000+ fights in a season yet.")
+
+    with row3_col3:
+        st.markdown('<div class="section-title">🌀 QI Legend</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="color:#8A8D9A;font-size:0.75rem;margin-bottom:10px;">'
+            'Most seasons with 10,000+ QI progress</div>',
+            unsafe_allow_html=True)
+        if qi_df.empty:
+            st.info("No QI data yet.")
+        else:
+            _ql = (
+                qi_df[qi_df["Player_ID"].astype(str).isin(_hof_curr_pids)]
+                [qi_df["Progress"] >= 10000]
+                .groupby(["Player_ID", "Player"])
+                .agg(legend_seasons=("Progress", "count"),
+                     best_season=("Progress", "max"))
+                .reset_index()
+                .sort_values(["legend_seasons", "best_season"], ascending=False)
+                .head(10).reset_index(drop=True)
+            )
+            if _ql.empty:
+                st.info("No players have 10,000+ QI progress in a season yet.")
+            else:
+                _max_ql = int(_ql["legend_seasons"].iloc[0])
+                def _render_ql(rank, row):
+                    _hof_card(rank, row["Player"], str(int(row["legend_seasons"])), "Legend Seasons", "#9B59B6",
+                              sub_lines=[f'Best season: {int(row["best_season"]):,} progress'],
+                              bar_pct=int(int(row["legend_seasons"]) / max(_max_ql, 1) * 100))
+                _hof_section(_ql.to_dict("records"), _render_ql,
+                             "No players have 10,000+ QI progress in a season yet.")
 
 
 # ══════════════════════════════════════════════════════════════════════════
