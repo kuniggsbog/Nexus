@@ -1982,20 +1982,36 @@ elif page == "🏆 Hall of Fame":
 
             _iron_rows = []
             for _pid in _hof_curr_pids:
-                _pid_gbg = set(gbg_df[gbg_df["Player_ID"].astype(str) == _pid]["season"])
-                _pid_qi  = set(qi_df[qi_df["Player_ID"].astype(str) == _pid]["season"])
+                _pid_gbg     = set(gbg_df[gbg_df["Player_ID"].astype(str) == _pid]["season"])
+                _pid_qi      = set(qi_df[qi_df["Player_ID"].astype(str) == _pid]["season"])
                 _played_both = _shared_s & _pid_gbg & _pid_qi
                 _name = (gbg_df[gbg_df["Player_ID"].astype(str) == _pid]["Player"].iloc[0]
                          if not gbg_df[gbg_df["Player_ID"].astype(str) == _pid].empty else _pid)
-                _iron_rows.append({"player": _name, "seasons": len(_played_both),
-                                   "gbg_only": len(_pid_gbg), "qi_only": len(_pid_qi)})
+                # Total activity for tiebreaking
+                _total_f = int(gbg_df[gbg_df["Player_ID"].astype(str) == _pid]["Fights"].sum())
+                _total_q = int(qi_df[qi_df["Player_ID"].astype(str) == _pid]["Progress"].sum())
+                _iron_rows.append({
+                    "player": _name,
+                    "seasons": len(_played_both),
+                    "gbg_seasons": len(_pid_gbg),
+                    "qi_seasons": len(_pid_qi),
+                    "total_fights": _total_f,
+                    "total_progress": _total_q,
+                })
 
-            _iron_rows = sorted(_iron_rows, key=lambda x: x["seasons"], reverse=True)[:10]
-            _max_iron  = _iron_rows[0]["seasons"] if _iron_rows else 1
+            _iron_rows = sorted(
+                _iron_rows,
+                key=lambda x: (x["seasons"], x["total_fights"] + x["total_progress"]),
+                reverse=True
+            )[:10]
+            _max_iron = _iron_rows[0]["seasons"] if _iron_rows else 1
             for rank, row in enumerate(_iron_rows, 1):
                 _hof_card(rank, row["player"], str(row["seasons"]), "Both Rounds",
                           "#4A90D9",
-                          sub_lines=[f'⚔️ {row["gbg_only"]} GBG seasons · 🌀 {row["qi_only"]} QI seasons'],
+                          sub_lines=[
+                              f'⚔️ {row["gbg_seasons"]} GBG · 🌀 {row["qi_seasons"]} QI seasons',
+                              f'Total: {row["total_fights"]:,} fights · {row["total_progress"]:,} progress',
+                          ],
                           bar_pct=int(row["seasons"] / max(_max_iron, 1) * 100))
 
     st.markdown("---")
