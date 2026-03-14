@@ -1361,7 +1361,8 @@ elif page == "👤 Player Profiles":
             wb       = mem.get("won_battles", 0)  if mem else 0
             gg       = mem.get("guildgoods", 0)   if mem else 0
             rank_num = mem.get("rank", 0)         if mem else 0
-            snap_str = mem.get("snapshot", "")    if mem else ""
+            snap_str = str(mem.get("snapshot", "")) if mem else ""
+            snap_str = snap_str if snap_str and snap_str != "nan" else ""
 
             # Latest season activity
             from modules.comparisons import sort_seasons as _ss_prof
@@ -1473,9 +1474,11 @@ elif page == "👤 Player Profiles":
             _pb_gbg = 0
             _pb_qi  = 0
             if not gbg_df.empty:
-                _pb_gbg = int(gbg_df[gbg_df["Player_ID"].astype(str) == pid]["Fights"].max() or 0)
+                _pb_val = gbg_df[gbg_df["Player_ID"].astype(str) == pid]["Fights"].max()
+                _pb_gbg = int(_pb_val) if pd.notna(_pb_val) else 0
             if not qi_df.empty:
-                _pb_qi = int(qi_df[qi_df["Player_ID"].astype(str) == pid]["Progress"].max() or 0)
+                _pb_val = qi_df[qi_df["Player_ID"].astype(str) == pid]["Progress"].max()
+                _pb_qi = int(_pb_val) if pd.notna(_pb_val) else 0
 
             # ── Consistency score ─────────────────────────────────────────
             _consistency = None
