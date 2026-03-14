@@ -1337,71 +1337,139 @@ elif page == "👤 Player Profiles":
                 st.rerun()
 
             profile     = get_player_profile(pid, gbg_df, qi_df, members_df)
-            avatar_html = get_avatar_html(profile["player_name"], size=80)
-            former_tag  = '<span class="former-badge" style="font-size:0.75rem;vertical-align:middle;margin-left:8px;">LEFT GUILD</span>' if profile["is_former"] else ""
+            avatar_html = get_avatar_html(profile["player_name"], size=90)
+            is_former_p = profile["is_former"]
 
-            mem   = profile.get("member_stats", {})
-            wins  = profile.get("wins", {})
-            gbg_w = wins.get("gbg_wins", 0)
-            qi_w  = wins.get("qi_wins", 0)
+            mem      = profile.get("member_stats", {})
+            wins     = profile.get("wins", {})
+            gbg_w    = wins.get("gbg_wins", 0)
+            qi_w     = wins.get("qi_wins", 0)
+            pts      = mem.get("points", 0)       if mem else 0
+            era      = mem.get("eraName", "")     if mem else ""
+            wb       = mem.get("won_battles", 0)  if mem else 0
+            gg       = mem.get("guildgoods", 0)   if mem else 0
+            rank_num = mem.get("rank", 0)         if mem else 0
+            snap_str = mem.get("snapshot", "")    if mem else ""
 
-            # Pre-format all values to avoid nested f-string conflicts
-            pts_str  = f"{mem['points']:,}"      if mem else ""
-            era_str  = mem.get("eraName", "")    if mem else ""
-            wb_str   = f"{mem['won_battles']:,}" if mem else ""
-            gg_str   = f"{mem['guildgoods']:,}"  if mem else ""
-            rank_str = f"#{mem['rank']}"         if mem else ""
-            snap_str = mem.get("snapshot", "")   if mem else ""
+            # Latest season activity
+            from modules.comparisons import sort_seasons as _ss_prof
+            _p_gbg_s = _ss_prof(gbg_df["season"].unique().tolist())[-1] if not gbg_df.empty else None
+            _p_qi_s  = _ss_prof(qi_df["season"].unique().tolist())[-1]  if not qi_df.empty  else None
+            _p_fights = 0
+            _p_qi_val = 0
+            if _p_gbg_s:
+                _pf = gbg_df[(gbg_df["Player_ID"].astype(str) == pid) & (gbg_df["season"] == _p_gbg_s)]
+                _p_fights = int(_pf["Fights"].sum()) if not _pf.empty else 0
+            if _p_qi_s:
+                _pq = qi_df[(qi_df["Player_ID"].astype(str) == pid) & (qi_df["season"] == _p_qi_s)]
+                _p_qi_val = int(_pq["Progress"].sum()) if not _pq.empty else 0
 
-            medal_html = ""
+            # Status strip
+            _has_gbg_p = not gbg_df.empty and pid in gbg_df["Player_ID"].astype(str).values
+            _has_qi_p  = not qi_df.empty  and pid in qi_df["Player_ID"].astype(str).values
+            _gbg_ok_p  = _p_fights >= 1000 or not _has_gbg_p
+            _qi_ok_p   = _p_qi_val >= 3500  or not _has_qi_p
+            if is_former_p:
+                _strip_p = "#3A3D4A"
+            elif _gbg_ok_p and _qi_ok_p:
+                _strip_p = "#2ECC71"
+            elif _gbg_ok_p or _qi_ok_p:
+                _strip_p = "#F39C12"
+            else:
+                _strip_p = "#E74C3C"
+
+            # Era pill
+            _era_colours_p = {
+                "SAAB":"#E74C3C","SASH":"#9B59B6","CATH":"#3498DB",
+                "INDU":"#E67E22","PROG":"#2ECC71","CONT":"#F39C12",
+                "GILD":"#FFD700","VIRT":"#1ABC9C","OCEA":"#2980B9",
+                "TOMO":"#8E44AD","FUTU":"#16A085",
+            }
+            _era_col_p  = _era_colours_p.get(era[:4].upper(), "#4A90D9") if era else "#4A90D9"
+            _era_pill_p = (
+                '<span style="background:' + _era_col_p + '22;color:' + _era_col_p + ';'
+                'border:1px solid ' + _era_col_p + '55;padding:2px 10px;border-radius:20px;'
+                'font-size:0.78rem;font-weight:700;">' + era + '</span>'
+            ) if era else ""
+
+            _rank_badge_p = (
+                '<span style="background:#0E1117;color:#8A8D9A;border:1px solid #2A2D3A;'
+                'padding:2px 8px;border-radius:20px;font-size:0.78rem;font-weight:600;">'
+                '#' + str(rank_num) + '</span>'
+            ) if rank_num else ""
+
+            _medals_p = ""
             if gbg_w > 0:
-                medal_html += f'<span style="background:#2A2000;color:#FFD700;padding:3px 10px;border-radius:20px;font-size:0.78rem;font-weight:700;margin-left:8px;">🥇{gbg_w}× GBG</span>'
+                _medals_p += '<span style="background:#2A2000;color:#FFD700;padding:2px 9px;border-radius:20px;font-size:0.78rem;font-weight:700;">🥇' + str(gbg_w) + '×GBG</span> '
             if qi_w > 0:
-                medal_html += f'<span style="background:#1A1A2A;color:#C0C0C0;padding:3px 10px;border-radius:20px;font-size:0.78rem;font-weight:700;margin-left:6px;">🥇{qi_w}× QI</span>'
+                _medals_p += '<span style="background:#1A1A2A;color:#C0C0C0;padding:2px 9px;border-radius:20px;font-size:0.78rem;font-weight:700;">🥇' + str(qi_w) + '×QI</span>'
 
-            st.markdown(f"""
-            <div class="profile-hero">
-              <div style="display:flex;align-items:flex-start;gap:22px;">
-                {avatar_html}
-                <div style="flex:1;">
-                  <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
-                    <span class="{'profile-name-former' if profile['is_former'] else 'profile-name'}">{profile['player_name']}</span>
-                    {former_tag}{medal_html}
-                  </div>
-                </div>
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
+            _former_tag_p = '<span class="former-badge" style="font-size:0.78rem;">LEFT GUILD</span>' if is_former_p else ""
+            _name_col_p   = "#8A8D9A" if is_former_p else "#F0F0F0"
+            _card_bg_p    = "#161820" if is_former_p else "#1A1D27"
+            _card_bdr_p   = "#3A2A2A" if is_former_p else "#2A2D3A"
 
-            if mem:
-                st.markdown(f"""
-                <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:12px;
-                            padding:16px 22px;margin-top:-8px;margin-bottom:16px;">
-                  <div style="display:flex;flex-wrap:wrap;gap:28px;">
-                    <div>
-                      <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Points</div>
-                      <div style="color:#FFD700;font-size:1.1rem;font-weight:800;">{pts_str}</div>
-                    </div>
-                    <div>
-                      <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Era</div>
-                      <div style="color:#E8E8E8;font-size:1.0rem;font-weight:700;">{era_str}</div>
-                    </div>
-                    <div>
-                      <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Won Battles</div>
-                      <div style="color:#2ECC71;font-size:1.0rem;font-weight:700;">{wb_str}</div>
-                    </div>
-                    <div>
-                      <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Guild Goods Daily</div>
-                      <div style="color:#4A90D9;font-size:1.0rem;font-weight:700;">{gg_str}</div>
-                    </div>
-                    <div>
-                      <div style="color:#8A8D9A;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;">Guild Rank</div>
-                      <div style="color:#E8E8E8;font-size:1.0rem;font-weight:700;">{rank_str}</div>
-                    </div>
-                  </div>
-                  <div style="margin-top:8px;color:#5A5D6A;font-size:0.7rem;">As of: {snap_str}</div>
-                </div>
-                """, unsafe_allow_html=True)
+            _pts_p = (
+                '<div style="color:#FFD700;font-size:1.9rem;font-weight:900;line-height:1;margin-bottom:4px;">'
+                + f"{pts:,}" +
+                '<span style="color:#8A8D9A;font-size:0.78rem;font-weight:400;margin-left:6px;">pts</span></div>'
+            ) if pts else ""
+
+            _fc_p = "#2ECC71" if _p_fights >= 1000 else "#E74C3C"
+            _qc_p = "#9B59B6" if _p_qi_val >= 3500 else "#E74C3C"
+            _act_p = ""
+            if _has_gbg_p and _p_gbg_s:
+                _act_p += (
+                    '<div style="text-align:center;padding:0 12px;">'
+                    '<div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px;">GBG</div>'
+                    '<div style="color:' + _fc_p + ';font-weight:800;font-size:1.1rem;">' + f"{_p_fights:,}" + '</div>'
+                    '<div style="color:#5A5D6A;font-size:0.65rem;">latest</div>'
+                    '</div>'
+                )
+            if _has_qi_p and _p_qi_s:
+                _act_p += (
+                    '<div style="text-align:center;padding:0 12px;border-left:1px solid ' + _card_bdr_p + ';">'
+                    '<div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px;">QI</div>'
+                    '<div style="color:' + _qc_p + ';font-weight:800;font-size:1.1rem;">' + f"{_p_qi_val:,}" + '</div>'
+                    '<div style="color:#5A5D6A;font-size:0.65rem;">latest</div>'
+                    '</div>'
+                )
+
+            _snap_p = '<div style="color:#5A5D6A;font-size:0.7rem;margin-top:8px;">As of: ' + snap_str + '</div>' if snap_str else ""
+
+            _hero_html = (
+                '<div style="background:' + _card_bg_p + ';border:1px solid ' + _card_bdr_p + ';'
+                'border-radius:14px;margin-bottom:16px;overflow:hidden;'
+                'box-shadow:0 2px 12px rgba(0,0,0,0.4);">'
+                '<div style="height:5px;background:' + _strip_p + ';width:100%;"></div>'
+                '<div style="padding:20px 24px;">'
+                  '<div style="display:flex;align-items:flex-start;gap:20px;">'
+                    + avatar_html +
+                    '<div style="flex:1;min-width:0;">'
+                      '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:7px;">'
+                        '<span style="color:' + _name_col_p + ';font-weight:900;font-size:1.5rem;line-height:1.2;">' + profile["player_name"] + '</span>'
+                        + _former_tag_p +
+                      '</div>'
+                      '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:10px;">'
+                        + _era_pill_p + _rank_badge_p + _medals_p +
+                      '</div>'
+                      + _pts_p +
+                    '</div>'
+                    '<div style="display:flex;align-items:center;border-left:1px solid ' + _card_bdr_p + ';margin-left:8px;">'
+                      + _act_p +
+                    '</div>'
+                  '</div>'
+                  '<div style="display:flex;gap:32px;margin-top:14px;padding-top:14px;border-top:1px solid ' + _card_bdr_p + ';flex-wrap:wrap;">'
+                    '<div><div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;">Won Battles</div>'
+                    '<div style="color:#2ECC71;font-size:1rem;font-weight:700;">' + f"{wb:,}" + '</div></div>'
+                    '<div><div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;">Guild Goods Daily</div>'
+                    '<div style="color:#4A90D9;font-size:1rem;font-weight:700;">' + f"{gg:,}" + '</div></div>'
+                  '</div>'
+                  + _snap_p +
+                '</div>'
+                '</div>'
+            )
+            st.markdown(_hero_html, unsafe_allow_html=True)
 
             tab_gbg_p, tab_qi_p = st.tabs(["⚔️ GBG History", "🌀 QI History"])
 
