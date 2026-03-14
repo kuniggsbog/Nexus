@@ -1417,12 +1417,134 @@ elif page == "👤 Player Profiles":
 
             _fc_p = "#2ECC71" if _p_fights >= 1000 else "#E74C3C"
             _qc_p = "#9B59B6" if _p_qi_val >= 3500 else "#E74C3C"
+
+            _snap_p = '<div style="color:#5A5D6A;font-size:0.7rem;margin-top:8px;">As of: ' + snap_str + '</div>' if snap_str else ""
+
+            # ── Achievement badges ────────────────────────────────────────
+            _achieve_badges = ""
+
+            # Century Club tier
+            _p_total_fights = int(gbg_df[gbg_df["Player_ID"].astype(str) == pid]["Fights"].sum()) if not gbg_df.empty else 0
+            if _p_total_fights >= 1_000_000:
+                _achieve_badges += '<span style="background:#2A2000;color:#FFD700;border:1px solid #FFD70055;padding:2px 9px;border-radius:20px;font-size:0.75rem;font-weight:700;">💯 1M Club</span> '
+            elif _p_total_fights >= 500_000:
+                _achieve_badges += '<span style="background:#1A0A2A;color:#9B59B6;border:1px solid #9B59B655;padding:2px 9px;border-radius:20px;font-size:0.75rem;font-weight:700;">💎 500K Club</span> '
+            elif _p_total_fights >= 100_000:
+                _achieve_badges += '<span style="background:#2A1A1A;color:#E74C3C;border:1px solid #E74C3C55;padding:2px 9px;border-radius:20px;font-size:0.75rem;font-weight:700;">🔥 100K Club</span> '
+
+            # Iron Player — seasons in both GBG and QI
+            if not gbg_df.empty and not qi_df.empty:
+                _p_gbg_seasons = set(gbg_df[gbg_df["Player_ID"].astype(str) == pid]["season"])
+                _p_qi_seasons  = set(qi_df[qi_df["Player_ID"].astype(str) == pid]["season"])
+                _iron_count    = len(_p_gbg_seasons & _p_qi_seasons)
+                if _iron_count > 0:
+                    _achieve_badges += '<span style="background:#0A1A2A;color:#4A90D9;border:1px solid #4A90D955;padding:2px 9px;border-radius:20px;font-size:0.75rem;font-weight:700;">🛡️ ' + str(_iron_count) + ' Iron Seasons</span> '
+
+            # Elite Fighter — seasons with 5000+ fights
+            if not gbg_df.empty:
+                _elite_count = int((gbg_df[gbg_df["Player_ID"].astype(str) == pid]["Fights"] >= 5000).sum())
+                if _elite_count > 0:
+                    _achieve_badges += '<span style="background:#2A2000;color:#F39C12;border:1px solid #F39C1255;padding:2px 9px;border-radius:20px;font-size:0.75rem;font-weight:700;">⚔️ ' + str(_elite_count) + ' Elite Seasons</span> '
+
+            # QI Legend — seasons with 10000+ progress
+            if not qi_df.empty:
+                _legend_count = int((qi_df[qi_df["Player_ID"].astype(str) == pid]["Progress"] >= 10000).sum())
+                if _legend_count > 0:
+                    _achieve_badges += '<span style="background:#1A0A2A;color:#9B59B6;border:1px solid #9B59B655;padding:2px 9px;border-radius:20px;font-size:0.75rem;font-weight:700;">🌀 ' + str(_legend_count) + ' QI Legend Seasons</span> '
+
+            _achieve_row = (
+                '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">'
+                + _achieve_badges + '</div>'
+            ) if _achieve_badges else ""
+
+            # ── Personal bests ────────────────────────────────────────────
+            _pb_gbg = 0
+            _pb_qi  = 0
+            if not gbg_df.empty:
+                _pb_gbg = int(gbg_df[gbg_df["Player_ID"].astype(str) == pid]["Fights"].max() or 0)
+            if not qi_df.empty:
+                _pb_qi = int(qi_df[qi_df["Player_ID"].astype(str) == pid]["Progress"].max() or 0)
+
+            # ── Consistency score ─────────────────────────────────────────
+            _consistency = None
+            if not gbg_df.empty and not qi_df.empty:
+                _all_gbg_s = set(gbg_df[gbg_df["Player_ID"].astype(str) == pid]["season"])
+                _all_qi_s  = set(qi_df[qi_df["Player_ID"].astype(str) == pid]["season"])
+                _all_played = _all_gbg_s | _all_qi_s
+                if _all_played:
+                    _met = 0
+                    for _s in _all_played:
+                        _sf = gbg_df[(gbg_df["Player_ID"].astype(str) == pid) & (gbg_df["season"] == _s)]["Fights"].sum() if _s in _all_gbg_s else 1000
+                        _sq = qi_df[(qi_df["Player_ID"].astype(str) == pid) & (qi_df["season"] == _s)]["Progress"].sum() if _s in _all_qi_s else 3500
+                        if int(_sf) >= 1000 and int(_sq) >= 3500:
+                            _met += 1
+                    _consistency = int(_met / len(_all_played) * 100)
+
+            # ── Trend indicator ───────────────────────────────────────────
+            _trend_gbg = ""
+            _trend_qi  = ""
+            if not gbg_df.empty and len(_p_gbg_seasons) >= 2:
+                from modules.comparisons import sort_seasons as _ss_trend
+                _sorted_gbg = _ss_trend(list(_p_gbg_seasons))
+                if len(_sorted_gbg) >= 2:
+                    _prev_s = _sorted_gbg[-2]
+                    _prev_f = int(gbg_df[(gbg_df["Player_ID"].astype(str) == pid) & (gbg_df["season"] == _prev_s)]["Fights"].sum())
+                    _avg_f  = int(gbg_df[gbg_df["Player_ID"].astype(str) == pid]["Fights"].mean())
+                    if _p_fights > _avg_f:
+                        _trend_gbg = '<span style="color:#2ECC71;font-size:0.8rem;font-weight:700;margin-left:4px;">↑</span>'
+                    elif _p_fights < _avg_f:
+                        _trend_gbg = '<span style="color:#E74C3C;font-size:0.8rem;font-weight:700;margin-left:4px;">↓</span>'
+                    else:
+                        _trend_gbg = '<span style="color:#8A8D9A;font-size:0.8rem;margin-left:4px;">→</span>'
+
+            if not qi_df.empty and len(_p_qi_seasons) >= 2:
+                _sorted_qi = _ss_trend(list(_p_qi_seasons))
+                if len(_sorted_qi) >= 2:
+                    _avg_q = int(qi_df[qi_df["Player_ID"].astype(str) == pid]["Progress"].mean())
+                    if _p_qi_val > _avg_q:
+                        _trend_qi = '<span style="color:#2ECC71;font-size:0.8rem;font-weight:700;margin-left:4px;">↑</span>'
+                    elif _p_qi_val < _avg_q:
+                        _trend_qi = '<span style="color:#E74C3C;font-size:0.8rem;font-weight:700;margin-left:4px;">↓</span>'
+                    else:
+                        _trend_qi = '<span style="color:#8A8D9A;font-size:0.8rem;margin-left:4px;">→</span>'
+
+            # ── Seasons active ────────────────────────────────────────────
+            _seasons_active = len(
+                set(gbg_df[gbg_df["Player_ID"].astype(str) == pid]["season"].tolist() if not gbg_df.empty else []) |
+                set(qi_df[qi_df["Player_ID"].astype(str) == pid]["season"].tolist() if not qi_df.empty else [])
+            )
+
+            # ── Bottom stats row ──────────────────────────────────────────
+            _consist_html = ""
+            if _consistency is not None:
+                _cc = "#2ECC71" if _consistency >= 80 else "#F39C12" if _consistency >= 50 else "#E74C3C"
+                _consist_html = (
+                    '<div><div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;">Consistency</div>'
+                    '<div style="color:' + _cc + ';font-size:1rem;font-weight:700;">' + str(_consistency) + '%</div></div>'
+                )
+
+            _seasons_html = (
+                '<div><div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;">Seasons Active</div>'
+                '<div style="color:#E8E8E8;font-size:1rem;font-weight:700;">' + str(_seasons_active) + '</div></div>'
+            ) if _seasons_active else ""
+
+            _pb_gbg_html = (
+                '<div><div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;">Best GBG Season</div>'
+                '<div style="color:#FFD700;font-size:1rem;font-weight:700;">' + f"{_pb_gbg:,}" + '</div></div>'
+            ) if _pb_gbg else ""
+
+            _pb_qi_html = (
+                '<div><div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;">Best QI Season</div>'
+                '<div style="color:#9B59B6;font-size:1rem;font-weight:700;">' + f"{_pb_qi:,}" + '</div></div>'
+            ) if _pb_qi else ""
+
+            # Update activity block with trend arrows
             _act_p = ""
             if _has_gbg_p and _p_gbg_s:
                 _act_p += (
                     '<div style="text-align:center;padding:0 12px;">'
                     '<div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px;">GBG</div>'
-                    '<div style="color:' + _fc_p + ';font-weight:800;font-size:1.1rem;">' + f"{_p_fights:,}" + '</div>'
+                    '<div style="color:' + _fc_p + ';font-weight:800;font-size:1.1rem;">' + f"{_p_fights:,}" + _trend_gbg + '</div>'
                     '<div style="color:#5A5D6A;font-size:0.65rem;">latest</div>'
                     '</div>'
                 )
@@ -1430,12 +1552,10 @@ elif page == "👤 Player Profiles":
                 _act_p += (
                     '<div style="text-align:center;padding:0 12px;border-left:1px solid ' + _card_bdr_p + ';">'
                     '<div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.5px;">QI</div>'
-                    '<div style="color:' + _qc_p + ';font-weight:800;font-size:1.1rem;">' + f"{_p_qi_val:,}" + '</div>'
+                    '<div style="color:' + _qc_p + ';font-weight:800;font-size:1.1rem;">' + f"{_p_qi_val:,}" + _trend_qi + '</div>'
                     '<div style="color:#5A5D6A;font-size:0.65rem;">latest</div>'
                     '</div>'
                 )
-
-            _snap_p = '<div style="color:#5A5D6A;font-size:0.7rem;margin-top:8px;">As of: ' + snap_str + '</div>' if snap_str else ""
 
             _hero_html = (
                 '<div style="background:' + _card_bg_p + ';border:1px solid ' + _card_bdr_p + ';'
@@ -1450,20 +1570,22 @@ elif page == "👤 Player Profiles":
                         '<span style="color:' + _name_col_p + ';font-weight:900;font-size:1.5rem;line-height:1.2;">' + profile["player_name"] + '</span>'
                         + _former_tag_p +
                       '</div>'
-                      '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:10px;">'
+                      '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:8px;">'
                         + _era_pill_p + _rank_badge_p + _medals_p +
                       '</div>'
+                      + _achieve_row +
                       + _pts_p +
                     '</div>'
                     '<div style="display:flex;align-items:center;border-left:1px solid ' + _card_bdr_p + ';margin-left:8px;">'
                       + _act_p +
                     '</div>'
                   '</div>'
-                  '<div style="display:flex;gap:32px;margin-top:14px;padding-top:14px;border-top:1px solid ' + _card_bdr_p + ';flex-wrap:wrap;">'
+                  '<div style="display:flex;gap:24px;margin-top:14px;padding-top:14px;border-top:1px solid ' + _card_bdr_p + ';flex-wrap:wrap;">'
                     '<div><div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;">Won Battles</div>'
                     '<div style="color:#2ECC71;font-size:1rem;font-weight:700;">' + f"{wb:,}" + '</div></div>'
                     '<div><div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;letter-spacing:1px;">Guild Goods Daily</div>'
                     '<div style="color:#4A90D9;font-size:1rem;font-weight:700;">' + f"{gg:,}" + '</div></div>'
+                    + _pb_gbg_html + _pb_qi_html + _seasons_html + _consist_html +
                   '</div>'
                   + _snap_p +
                 '</div>'
