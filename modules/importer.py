@@ -78,14 +78,33 @@ def _load_csv_folder(folder: Path, id_col: str = "Player_ID") -> pd.DataFrame:
         try:
             raw = csv_file.read_text(encoding="utf-8-sig")
 
-            # Detect delimiter used by the file
+            # Detect separator
             sep = ";" if raw.count(";") > raw.count(",") else ","
 
             df = pd.read_csv(csv_file, sep=sep, encoding="utf-8-sig")
 
-            # Guard against files loading as a single merged column
+            # Clean column names aggressively
+            df.columns = [str(c).replace("\ufeff", "").strip() for c in df.columns]
+
+            # If the file still loaded as a single merged column, try the other separator once
             if len(df.columns) == 1:
-                print(f"Warning: {csv_file.name} loaded as one column only.")
+                alt_sep = "," if sep == ";" else ";"
+                df = pd.read_csv(csv_file, sep=alt_sep, encoding="utf-8-sig")
+                df.columns = [str(c).replace("\ufeff", "").strip() for c in df.columns]
+
+            # Normalise common alias columns so downstream code can rely on Player_ID / Player
+            col_map = {}
+            if "member_id" in df.columns and "Player_ID" not in df.columns:
+                col_map["member_id"] = "Player_ID"
+            if "member" in df.columns and "Player" not in df.columns:
+                col_map["member"] = "Player"
+            if col_map:
+                df = df.rename(columns=col_map)
+
+            # Clean string values in key identity columns if present
+            for col in ["Player_ID", "Player", "member_id", "member"]:
+                if col in df.columns:
+                    df[col] = df[col].astype(str).str.replace("\ufeff", "", regex=False).str.strip()
 
             df["season"] = _season_from_filename(csv_file)
             frames.append(df)
@@ -99,8 +118,20 @@ def _load_csv_folder(folder: Path, id_col: str = "Player_ID") -> pd.DataFrame:
 
     combined = pd.concat(frames, ignore_index=True)
 
+    # Final column cleanup after concat
+    combined.columns = [str(c).replace("\ufeff", "").strip() for c in combined.columns]
+
+    # Final alias normalization after concat
+    col_map = {}
+    if "member_id" in combined.columns and "Player_ID" not in combined.columns:
+        col_map["member_id"] = "Player_ID"
+    if "member" in combined.columns and "Player" not in combined.columns:
+        col_map["member"] = "Player"
+    if col_map:
+        combined = combined.rename(columns=col_map)
+
     if id_col in combined.columns:
-        combined[id_col] = combined[id_col].astype(str)
+        combined[id_col] = combined[id_col].astype(str).str.replace("\ufeff", "", regex=False).str.strip()
 
     return combined
 
