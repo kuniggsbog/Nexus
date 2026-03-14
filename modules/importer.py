@@ -68,21 +68,40 @@ def _load_csv_folder(folder: Path, id_col: str = "Player_ID") -> pd.DataFrame:
     """Load all CSVs in a folder, adding a 'season' column from the filename."""
     if not folder.exists():
         return pd.DataFrame()
+
     frames = []
+
     for csv_file in sorted(folder.glob("*.csv")):
         if csv_file.name.startswith("."):
             continue
+
         try:
-            df = pd.read_csv(csv_file)
+            raw = csv_file.read_text(encoding="utf-8-sig")
+
+            # Detect delimiter used by the file
+            sep = ";" if raw.count(";") > raw.count(",") else ","
+
+            df = pd.read_csv(csv_file, sep=sep, encoding="utf-8-sig")
+
+            # Guard against files loading as a single merged column
+            if len(df.columns) == 1:
+                print(f"Warning: {csv_file.name} loaded as one column only.")
+
             df["season"] = _season_from_filename(csv_file)
             frames.append(df)
-        except Exception:
+
+        except Exception as e:
+            print(f"Failed to load {csv_file.name}: {e}")
             continue
+
     if not frames:
         return pd.DataFrame()
+
     combined = pd.concat(frames, ignore_index=True)
+
     if id_col in combined.columns:
         combined[id_col] = combined[id_col].astype(str)
+
     return combined
 
 
