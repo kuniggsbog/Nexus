@@ -1573,7 +1573,7 @@ elif page == "👤 Player Profiles":
                       '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:8px;">'
                         + _era_pill_p + _rank_badge_p + _medals_p +
                       '</div>'
-                      + _achieve_row +
+                      + _achieve_row
                       + _pts_p +
                     '</div>'
                     '<div style="display:flex;align-items:center;border-left:1px solid ' + _card_bdr_p + ';margin-left:8px;">'
