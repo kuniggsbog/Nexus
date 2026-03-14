@@ -78,9 +78,10 @@ def flag_icon(size=22): return icon_html("flag_icon.png", size)
 
 
 # ── Avatar helper ──────────────────────────────────────────────────────────
-def get_avatar_html(player_name: str, size: int = 56) -> str:
+def get_avatar_html(player_name, size: int = 56) -> str:
     """Return <img> if player_name.jpg exists, else styled initials div. Rectangular shape."""
-    safe_name = player_name.strip()
+    player_name = str(player_name) if player_name and str(player_name) != "nan" else "?"
+    safe_name = player_name.strip() or "?"
     jpg_path = AVATAR_DIR / f"{safe_name}.jpg"
     png_path = AVATAR_DIR / f"{safe_name}.png"
 

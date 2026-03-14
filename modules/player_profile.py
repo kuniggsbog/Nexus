@@ -125,18 +125,31 @@ def get_all_players(gbg_df: pd.DataFrame, qi_df: pd.DataFrame, members_df: pd.Da
         return {"current": pd.DataFrame(columns=["Player_ID", "Player"]),
                 "former":  pd.DataFrame(columns=["Player_ID", "Player"])}
 
-    combined = pd.concat(all_rows).drop_duplicates(subset=["Player_ID"])
+    # Combine all sources, keep first occurrence per Player_ID
+    combined = pd.concat(all_rows, ignore_index=True)
     combined["Player_ID"] = combined["Player_ID"].astype(str)
+    combined["Player"]    = combined["Player"].astype(str).str.strip()
 
-    # Override names with the most recent member snapshot name (most up-to-date)
+    # Build a name map: prefer member snapshot name as most up-to-date
+    name_map = {}
+    # First pass — GBG/QI names
+    for df in [gbg_df, qi_df]:
+        if not df.empty:
+            for _, r in df[["Player_ID","Player"]].drop_duplicates().iterrows():
+                name_map[str(r["Player_ID"])] = str(r["Player"]).strip()
+    # Second pass — member snapshot overrides (most authoritative)
     if members_df is not None and not members_df.empty:
         snaps = sort_seasons(members_df["snapshot"].unique().tolist(), descending=True)
-        latest_names = (members_df[members_df["snapshot"] == snaps[0]][["Player_ID", "Player"]]
-                        .drop_duplicates(subset=["Player_ID"]).copy())
-        latest_names["Player_ID"] = latest_names["Player_ID"].astype(str)
-        combined = combined.merge(latest_names, on="Player_ID", how="left", suffixes=("_old", ""))
-        combined["Player"] = combined["Player"].fillna(combined["Player_old"])
-        combined = combined.drop(columns=["Player_old"], errors="ignore")
+        latest_mem_names = members_df[members_df["snapshot"] == snaps[0]][["Player_ID","Player"]].drop_duplicates()
+        for _, r in latest_mem_names.iterrows():
+            name_map[str(r["Player_ID"])] = str(r["Player"]).strip()
+
+    # Apply name map
+    all_pids = combined["Player_ID"].unique()
+    combined = pd.DataFrame({
+        "Player_ID": all_pids,
+        "Player":    [name_map.get(str(pid), str(pid)) for pid in all_pids]
+    })
 
     current = combined[combined["Player_ID"].isin(latest_pids)].copy()
     former  = combined[~combined["Player_ID"].isin(latest_pids)].copy()
