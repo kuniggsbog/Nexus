@@ -128,6 +128,16 @@ def get_all_players(gbg_df: pd.DataFrame, qi_df: pd.DataFrame, members_df: pd.Da
     combined = pd.concat(all_rows).drop_duplicates(subset=["Player_ID"])
     combined["Player_ID"] = combined["Player_ID"].astype(str)
 
+    # Override names with the most recent member snapshot name (most up-to-date)
+    if members_df is not None and not members_df.empty:
+        snaps = sort_seasons(members_df["snapshot"].unique().tolist(), descending=True)
+        latest_names = (members_df[members_df["snapshot"] == snaps[0]][["Player_ID", "Player"]]
+                        .drop_duplicates(subset=["Player_ID"]).copy())
+        latest_names["Player_ID"] = latest_names["Player_ID"].astype(str)
+        combined = combined.merge(latest_names, on="Player_ID", how="left", suffixes=("_old", ""))
+        combined["Player"] = combined["Player"].fillna(combined["Player_old"])
+        combined = combined.drop(columns=["Player_old"], errors="ignore")
+
     current = combined[combined["Player_ID"].isin(latest_pids)].copy()
     former  = combined[~combined["Player_ID"].isin(latest_pids)].copy()
 
@@ -161,6 +171,10 @@ def get_player_profile(player_id: str, gbg_df: pd.DataFrame, qi_df: pd.DataFrame
         player_name = gbg_hist["Player"].iloc[-1]
     elif not qi_hist.empty:
         player_name = qi_hist["Player"].iloc[-1]
+    elif members_df is not None and not members_df.empty:
+        _mem_row = members_df[members_df["Player_ID"].astype(str) == pid]
+        if not _mem_row.empty:
+            player_name = str(_mem_row["Player"].iloc[0])
 
     # Determine if former member
     is_former = True
@@ -171,6 +185,12 @@ def get_player_profile(player_id: str, gbg_df: pd.DataFrame, qi_df: pd.DataFrame
             if pid in df[df["season"] == latest]["Player_ID"].astype(str).values:
                 is_former = False
                 break
+    # Also check latest member snapshot — if present there, they are current
+    if is_former and members_df is not None and not members_df.empty:
+        snaps = sort_seasons(members_df["snapshot"].unique().tolist(), descending=True)
+        latest_snap_pids = members_df[members_df["snapshot"] == snaps[0]]["Player_ID"].astype(str).values
+        if pid in latest_snap_pids:
+            is_former = False
 
     profile = {
         "player_id":    pid,
