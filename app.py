@@ -1083,61 +1083,73 @@ elif page == "👤 Player Profiles":
     if current_players.empty and former_players.empty:
         st.info("No player data found. Import seasons first.")
     else:
-        # ── Smart filter bar ─────────────────────────────────────────────
-        import string as _string
+        # ── Filter bar ───────────────────────────────────────────────────
+        # Search
+        search = st.text_input("Search", placeholder="Search players...",
+                               label_visibility="collapsed")
 
-        # Status filter
-        _status_opts = ["All", "Current", "Former"]
-        _status = st.radio("Show", _status_opts, horizontal=True,
-                           key="pp_status", label_visibility="collapsed")
+        fc1, fc2 = st.columns(2)
 
-        # Letter filter row
-        _all_letters = list(_string.ascii_uppercase)
-        _letter_cols = st.columns(len(_all_letters) + 1)
-        if "pp_letter" not in st.session_state:
-            st.session_state["pp_letter"] = "All"
+        # Status pills
+        with fc1:
+            _status_opts = ["All", "Current", "Former"]
+            _status = st.radio("Status", _status_opts, horizontal=True,
+                               key="pp_status", label_visibility="collapsed")
 
-        # Build all-players list to know which letters have players
-        _all_names = pd.concat([current_players, former_players], ignore_index=True)["Player"].dropna().str.upper()
-        _active_letters = set(_all_names.str[0].dropna().unique())
+        # Sort-by pills
+        with fc2:
+            _sort_opts = ["Points", "Name", "GBG Fights", "QI Progress", "Rank"]
+            _sort_by = st.radio("Sort by", _sort_opts, horizontal=True,
+                                key="pp_sort", label_visibility="collapsed")
 
-        with _letter_cols[0]:
-            if st.button("All", key="ltr_all",
-                         type="primary" if st.session_state["pp_letter"] == "All" else "secondary"):
-                st.session_state["pp_letter"] = "All"
-                st.rerun()
-        for _li, _ltr in enumerate(_all_letters):
-            with _letter_cols[_li + 1]:
-                _has = _ltr in _active_letters
-                _is_sel = st.session_state["pp_letter"] == _ltr
-                if _has:
-                    if st.button(_ltr, key=f"ltr_{_ltr}",
-                                 type="primary" if _is_sel else "secondary"):
-                        st.session_state["pp_letter"] = _ltr
-                        st.rerun()
-                else:
-                    st.markdown(
-                        f'<div style="color:#3A3D4A;text-align:center;font-size:0.75rem;'
-                        f'padding:6px 0;user-select:none;">{_ltr}</div>',
-                        unsafe_allow_html=True,
-                    )
-
-        _sel_letter = st.session_state["pp_letter"]
-
-        # Name search (still available for typing)
-        default_search = ""
-        search = st.text_input("🔍 Search by name", value=default_search,
-                               placeholder="Type a name...", label_visibility="collapsed")
+        def _sort_df(df):
+            if df.empty:
+                return df
+            if _sort_by == "Name":
+                return df.sort_values("Player", ascending=True).reset_index(drop=True)
+            if _sort_by == "Rank":
+                def _get_rank(pid):
+                    m = get_latest_member_stats(members_df, str(pid))
+                    return m.get("rank", 9999) if m else 9999
+                df = df.copy()
+                df["_rank"] = df["Player_ID"].apply(_get_rank)
+                return df.sort_values("_rank").drop(columns=["_rank"]).reset_index(drop=True)
+            if _sort_by == "GBG Fights":
+                if gbg_df.empty:
+                    return df
+                from modules.comparisons import sort_seasons as _ss_sort
+                _ls = _ss_sort(gbg_df["season"].unique().tolist())[-1]
+                _ftotals = (gbg_df[gbg_df["season"] == _ls]
+                            .groupby("Player_ID")["Fights"].sum()
+                            .reset_index())
+                df = df.copy()
+                df["Player_ID"] = df["Player_ID"].astype(str)
+                _ftotals["Player_ID"] = _ftotals["Player_ID"].astype(str)
+                df = df.merge(_ftotals, on="Player_ID", how="left").fillna({"Fights": 0})
+                return df.sort_values("Fights", ascending=False).drop(columns=["Fights"]).reset_index(drop=True)
+            if _sort_by == "QI Progress":
+                if qi_df.empty:
+                    return df
+                from modules.comparisons import sort_seasons as _ss_sort
+                _ls = _ss_sort(qi_df["season"].unique().tolist())[-1]
+                _qtotals = (qi_df[qi_df["season"] == _ls]
+                            .groupby("Player_ID")["Progress"].sum()
+                            .reset_index())
+                df = df.copy()
+                df["Player_ID"] = df["Player_ID"].astype(str)
+                _qtotals["Player_ID"] = _qtotals["Player_ID"].astype(str)
+                df = df.merge(_qtotals, on="Player_ID", how="left").fillna({"Progress": 0})
+                return df.sort_values("Progress", ascending=False).drop(columns=["Progress"]).reset_index(drop=True)
+            # Default: Points (already sorted by points desc from get_all_players)
+            return df
 
         def filter_players(df):
             result = df.copy()
             if search:
                 result = result[result["Player"].str.contains(search, case=False, na=False)]
-            if _sel_letter != "All":
-                result = result[result["Player"].str.upper().str.startswith(_sel_letter, na=False)]
-            return result
+            return _sort_df(result)
 
-        curr_filtered   = filter_players(current_players) if _status != "Former" else pd.DataFrame()
+        curr_filtered   = filter_players(current_players) if _status != "Former"  else pd.DataFrame()
         former_filtered = filter_players(former_players)  if _status != "Current" else pd.DataFrame()
 
         def render_player_grid(df, is_former=False):
