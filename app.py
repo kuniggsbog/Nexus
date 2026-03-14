@@ -1910,54 +1910,177 @@ elif page == "📊 Metrics":
 elif page == "🏆 Hall of Fame":
     st.markdown("# 🏆 Hall of Fame")
 
-    hof_col, streak_col = st.columns(2)
+    # ── Helper to render a ranked card list ──────────────────────────────
+    def _hof_card(rank, name, primary_val, primary_label, primary_colour,
+                  sub_lines=None, bar_pct=100):
+        medal    = {1:"🥇", 2:"🥈", 3:"🥉"}.get(rank, f"#{rank}")
+        bar_col  = "#FFD700" if rank==1 else "#C0C0C0" if rank==2 else "#CD7F32" if rank==3 else "#4A90D9"
+        subs     = "".join(
+            f'<div style="color:#8A8D9A;font-size:0.75rem;margin-top:3px;">{l}</div>'
+            for l in (sub_lines or [])
+        )
+        st.markdown(f"""
+        <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:12px;
+                    padding:14px 18px;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="font-size:1.5rem;min-width:34px;">{medal}</div>
+            <div style="flex:1;">
+              <div style="color:#E8E8E8;font-weight:800;font-size:1rem;">{name}</div>
+              {subs}
+            </div>
+            <div style="text-align:right;">
+              <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;
+                          letter-spacing:0.5px;">{primary_label}</div>
+              <div style="color:{primary_colour};font-weight:800;font-size:1.15rem;">{primary_val}</div>
+            </div>
+          </div>
+          <div style="background:#0E1117;border-radius:4px;height:4px;margin-top:10px;">
+            <div style="background:{bar_col};width:{bar_pct}%;height:4px;border-radius:4px;"></div>
+          </div>
+        </div>""", unsafe_allow_html=True)
 
-    with hof_col:
+    # ── Compute current player set ────────────────────────────────────────
+    if not gbg_df.empty:
+        from modules.comparisons import sort_seasons as _ss_hof
+        _hof_gbg_seasons = _ss_hof(gbg_df["season"].unique().tolist())
+        _hof_latest      = _hof_gbg_seasons[-1]
+        _hof_curr_pids   = set(gbg_df[gbg_df["season"] == _hof_latest]["Player_ID"].astype(str))
+    else:
+        _hof_curr_pids = set()
+
+    # ── Row 1: All-Time #1 Finishers + Iron Player ────────────────────────
+    row1_col1, row1_col2 = st.columns(2)
+
+    with row1_col1:
         st.markdown('<div class="section-title">🏆 All-Time #1 Finishers</div>', unsafe_allow_html=True)
         hof_data = get_hall_of_fame(gbg_df, qi_df)
         if hof_data:
-            medal_map = {1:"🥇", 2:"🥈", 3:"🥉"}
+            _max_hof = hof_data[0]["total"] if hof_data else 1
             for rank, row in enumerate(hof_data, 1):
-                medal = medal_map.get(rank, f"#{rank}")
-                gbg_b = f'<span style="color:#FFD700;">⚔️ {row["gbg_wins"]}× GBG</span>' if row["gbg_wins"] else ""
-                qi_b  = f'<span style="color:#C0C0C0;">🌀 {row["qi_wins"]}× QI</span>'   if row["qi_wins"]  else ""
-                gap   = "&nbsp;&nbsp;" if row["gbg_wins"] and row["qi_wins"] else ""
-                st.markdown(f"""
-                <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
-                            padding:14px 18px;margin-bottom:8px;display:flex;
-                            align-items:center;gap:14px;">
-                  <div style="font-size:1.6rem;min-width:36px;">{medal}</div>
-                  <div style="flex:1;">
-                    <div style="color:#E8E8E8;font-weight:700;font-size:1rem;">{row["player"]}</div>
-                    <div style="margin-top:5px;">{gbg_b}{gap}{qi_b}</div>
-                  </div>
-                  <div style="color:#FFD700;font-size:1.3rem;font-weight:800;">{row["total"]} 🥇</div>
-                </div>""", unsafe_allow_html=True)
+                gbg_b = f'⚔️ {row["gbg_wins"]}× GBG' if row["gbg_wins"] else ""
+                qi_b  = f'🌀 {row["qi_wins"]}× QI'   if row["qi_wins"]  else ""
+                subs  = [s for s in [gbg_b, qi_b] if s]
+                _hof_card(rank, row["player"], f'{row["total"]} 🥇', "Season Wins",
+                          "#FFD700", sub_lines=subs,
+                          bar_pct=int(row["total"] / max(_max_hof, 1) * 100))
         else:
             st.info("No season winners recorded yet.")
 
-    with streak_col:
-        st.markdown('<div class="section-title">🔥 Longest Active Streaks (GBG)</div>', unsafe_allow_html=True)
-        streaks_hof = get_active_streak(gbg_df, qi_df)
-        if streaks_hof:
-            max_streak = streaks_hof[0]["streak"]
-            for rank, row in enumerate(streaks_hof, 1):
-                bar_pct = int(row["streak"] / max(max_streak, 1) * 100)
-                bar_col = "#FFD700" if rank == 1 else "#4A90D9" if rank <= 3 else "#2A2D3A"
-                st.markdown(f"""
-                <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
-                            padding:14px 18px;margin-bottom:8px;">
-                  <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <div style="color:#E8E8E8;font-weight:700;font-size:1rem;">#{rank} {row["player"]}</div>
-                    <div style="color:#FFD700;font-weight:800;font-size:1.1rem;">{row["streak"]} 🔥</div>
-                  </div>
-                  <div style="background:#0E1117;border-radius:4px;height:6px;margin-top:8px;">
-                    <div style="background:{bar_col};width:{bar_pct}%;height:6px;border-radius:4px;"></div>
-                  </div>
-                  <div style="color:#5A5D6A;font-size:0.75rem;margin-top:5px;">{row["total_seasons"]} total seasons participated</div>
-                </div>""", unsafe_allow_html=True)
+    with row1_col2:
+        st.markdown('<div class="section-title">🛡️ Iron Player</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="color:#8A8D9A;font-size:0.75rem;margin-bottom:10px;">'
+            'Most seasons played without missing GBG or QI</div>',
+            unsafe_allow_html=True)
+        if gbg_df.empty or qi_df.empty:
+            st.info("Need both GBG and QI data.")
         else:
-            st.info("No streak data yet.")
+            from modules.comparisons import sort_seasons as _ss_iron
+            _gbg_s   = set(_ss_iron(gbg_df["season"].unique().tolist()))
+            _qi_s    = set(_ss_iron(qi_df["season"].unique().tolist()))
+            _shared_s = _gbg_s & _qi_s   # seasons that appear in both
+
+            _iron_rows = []
+            for _pid in _hof_curr_pids:
+                _pid_gbg = set(gbg_df[gbg_df["Player_ID"].astype(str) == _pid]["season"])
+                _pid_qi  = set(qi_df[qi_df["Player_ID"].astype(str) == _pid]["season"])
+                _played_both = _shared_s & _pid_gbg & _pid_qi
+                _name = (gbg_df[gbg_df["Player_ID"].astype(str) == _pid]["Player"].iloc[0]
+                         if not gbg_df[gbg_df["Player_ID"].astype(str) == _pid].empty else _pid)
+                _iron_rows.append({"player": _name, "seasons": len(_played_both),
+                                   "gbg_only": len(_pid_gbg), "qi_only": len(_pid_qi)})
+
+            _iron_rows = sorted(_iron_rows, key=lambda x: x["seasons"], reverse=True)[:10]
+            _max_iron  = _iron_rows[0]["seasons"] if _iron_rows else 1
+            for rank, row in enumerate(_iron_rows, 1):
+                _hof_card(rank, row["player"], str(row["seasons"]), "Both Rounds",
+                          "#4A90D9",
+                          sub_lines=[f'⚔️ {row["gbg_only"]} GBG seasons · 🌀 {row["qi_only"]} QI seasons'],
+                          bar_pct=int(row["seasons"] / max(_max_iron, 1) * 100))
+
+    st.markdown("---")
+
+    # ── Row 2: Double Threat + Guild MVP ─────────────────────────────────
+    row2_col1, row2_col2 = st.columns(2)
+
+    with row2_col1:
+        st.markdown('<div class="section-title">⚡ Double Threat</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="color:#8A8D9A;font-size:0.75rem;margin-bottom:10px;">'
+            'Highest combined all-time GBG fights + QI progress</div>',
+            unsafe_allow_html=True)
+        if gbg_df.empty or qi_df.empty:
+            st.info("Need both GBG and QI data.")
+        else:
+            _gbg_totals = (gbg_df[gbg_df["Player_ID"].astype(str).isin(_hof_curr_pids)]
+                           .groupby(["Player_ID","Player"])["Fights"].sum()
+                           .reset_index().rename(columns={"Fights":"total_fights"}))
+            _qi_totals  = (qi_df[qi_df["Player_ID"].astype(str).isin(_hof_curr_pids)]
+                           .groupby(["Player_ID","Player"])["Progress"].sum()
+                           .reset_index().rename(columns={"Progress":"total_progress"}))
+            _dt = _gbg_totals.merge(_qi_totals, on="Player_ID", how="outer", suffixes=("","_qi"))
+            _dt["Player"]         = _dt["Player"].fillna(_dt["Player_qi"])
+            _dt["total_fights"]   = _dt["total_fights"].fillna(0).astype(int)
+            _dt["total_progress"] = _dt["total_progress"].fillna(0).astype(int)
+            # Normalise each to 0-100 then sum for combined score
+            _f_max = max(_dt["total_fights"].max(), 1)
+            _p_max = max(_dt["total_progress"].max(), 1)
+            _dt["score"] = (_dt["total_fights"] / _f_max * 50 +
+                            _dt["total_progress"] / _p_max * 50)
+            _dt = _dt.sort_values("score", ascending=False).head(10).reset_index(drop=True)
+            _max_score = _dt["score"].iloc[0] if not _dt.empty else 1
+            for rank, (_, row) in enumerate(_dt.iterrows(), 1):
+                _hof_card(rank, row["Player"],
+                          f'{row["score"]:.0f} pts', "Combined Score", "#9B59B6",
+                          sub_lines=[f'⚔️ {int(row["total_fights"]):,} fights · 🌀 {int(row["total_progress"]):,} progress'],
+                          bar_pct=int(row["score"] / max(_max_score, 1) * 100))
+
+    with row2_col2:
+        st.markdown('<div class="section-title">👑 Guild MVP</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="color:#8A8D9A;font-size:0.75rem;margin-bottom:10px;">'
+            'Composite score: GBG fights + QI progress + guild points + goods</div>',
+            unsafe_allow_html=True)
+
+        _mvp_rows = []
+        for _pid in _hof_curr_pids:
+            _pid_s = str(_pid)
+            # GBG fights (normalised)
+            _f = int(gbg_df[gbg_df["Player_ID"].astype(str) == _pid_s]["Fights"].sum()) if not gbg_df.empty else 0
+            # QI progress (normalised)
+            _q = int(qi_df[qi_df["Player_ID"].astype(str) == _pid_s]["Progress"].sum()) if not qi_df.empty else 0
+            # Member stats
+            _mem = get_latest_member_stats(members_df, _pid_s)
+            _pts = int(_mem.get("points", 0))    if _mem else 0
+            _gg  = int(_mem.get("guildgoods", 0)) if _mem else 0
+            _name = (gbg_df[gbg_df["Player_ID"].astype(str) == _pid_s]["Player"].iloc[0]
+                     if not gbg_df[gbg_df["Player_ID"].astype(str) == _pid_s].empty else _pid_s)
+            _mvp_rows.append({"player": _name, "fights": _f, "progress": _q,
+                              "points": _pts, "goods": _gg})
+
+        if not _mvp_rows:
+            st.info("No data yet.")
+        else:
+            import pandas as _pd_mvp
+            _mvp = _pd_mvp.DataFrame(_mvp_rows)
+            # Normalise each component 0-100, weighted sum
+            def _norm(s): return (s / s.max() * 100) if s.max() > 0 else s
+            _mvp["score"] = (
+                _norm(_mvp["fights"])   * 0.35 +
+                _norm(_mvp["progress"]) * 0.30 +
+                _norm(_mvp["points"])   * 0.20 +
+                _norm(_mvp["goods"])    * 0.15
+            )
+            _mvp = _mvp.sort_values("score", ascending=False).head(10).reset_index(drop=True)
+            _max_mvp = _mvp["score"].iloc[0]
+            for rank, (_, row) in enumerate(_mvp.iterrows(), 1):
+                _hof_card(rank, row["player"],
+                          f'{row["score"]:.0f} pts', "MVP Score", "#FFD700",
+                          sub_lines=[
+                              f'⚔️ {int(row["fights"]):,} fights · 🌀 {int(row["progress"]):,} QI',
+                              f'🏅 {int(row["points"]):,} pts · 📦 {int(row["goods"]):,} goods',
+                          ],
+                          bar_pct=int(row["score"] / max(_max_mvp, 1) * 100))
 
 
 # ══════════════════════════════════════════════════════════════════════════
