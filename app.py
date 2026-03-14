@@ -1256,6 +1256,19 @@ elif page == "👤 Player Profiles":
                         _opacity  = "opacity:0.78;" if is_former else ""
                         _name_col = "#8A8D9A" if is_former else "#F0F0F0"
 
+                        # Pre-build all conditional HTML blocks
+                        _pts_html = (
+                            f'<div style="color:#FFD700;font-size:1.5rem;font-weight:900;'
+                            f'line-height:1;margin-bottom:4px;">{pts:,}'
+                            f'<span style="color:#8A8D9A;font-size:0.7rem;font-weight:400;'
+                            f'margin-left:4px;">pts</span></div>'
+                        ) if pts else ""
+
+                        _rank_top = (
+                            f'<div style="color:#5A5D6A;font-size:0.78rem;font-weight:700;">'
+                            f'#{rank_num}</div>'
+                        ) if rank_num else ""
+
                         st.markdown(f"""
                         <div style="background:{_card_bg};border:1px solid {_card_bdr};
                                     border-radius:14px;margin-bottom:10px;overflow:hidden;
@@ -1272,11 +1285,9 @@ elif page == "👤 Player Profiles":
                                 <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
                                   {_era_pill}{_rank_badge}{_medal_html}
                                 </div>
-                                {'<div style="color:#FFD700;font-size:1.5rem;font-weight:900;line-height:1;margin-bottom:4px;">' + f"{pts:,}" + '<span style="color:#8A8D9A;font-size:0.7rem;font-weight:400;margin-left:4px;">pts</span></div>' if pts else ""}
+                                {_pts_html}
                               </div>
-                              <div style="text-align:right;min-width:32px;">
-                                {'<div style="color:#5A5D6A;font-size:0.78rem;font-weight:700;">#' + str(rank_num) + '</div>' if rank_num else ""}
-                              </div>
+                              <div style="text-align:right;min-width:32px;">{_rank_top}</div>
                             </div>
                             <div style="display:flex;gap:16px;margin-top:6px;padding-top:10px;border-top:1px solid {_card_bdr};">
                               <div style="flex:1;display:flex;gap:16px;flex-wrap:wrap;">
@@ -1289,9 +1300,7 @@ elif page == "👤 Player Profiles":
                                   <div style="color:#4A90D9;font-weight:700;font-size:0.82rem;">{gg:,}</div>
                                 </div>
                               </div>
-                              <div style="display:flex;gap:14px;">
-                                {_act_gbg}{_act_qi}
-                              </div>
+                              <div style="display:flex;gap:14px;">{_act_gbg}{_act_qi}</div>
                             </div>
                           </div>
                         </div>
