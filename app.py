@@ -1259,36 +1259,26 @@ elif page == "👤 Player Profiles":
                         st.markdown(f"""
                         <div style="background:{_card_bg};border:1px solid {_card_bdr};
                                     border-radius:14px;margin-bottom:10px;overflow:hidden;
-                                    transition:border-color 0.2s;{_opacity}
-                                    box-shadow:0 2px 8px rgba(0,0,0,0.3);">
-                          <!-- Status strip -->
+                                    {_opacity}box-shadow:0 2px 8px rgba(0,0,0,0.3);">
                           <div style="height:4px;background:{_strip_col};width:100%;"></div>
                           <div style="padding:16px 18px;">
-                            <!-- Header row: avatar + name block + rank -->
                             <div style="display:flex;align-items:flex-start;gap:14px;">
                               {avatar_html}
                               <div style="flex:1;min-width:0;">
-                                <!-- Name + former tag -->
                                 <div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:5px;">
-                                  <span style="color:{_name_col};font-weight:800;font-size:1.08rem;
-                                               line-height:1.2;">{prow['Player']}</span>
+                                  <span style="color:{_name_col};font-weight:800;font-size:1.08rem;line-height:1.2;">{prow['Player']}</span>
                                   {former_tag}
                                 </div>
-                                <!-- Era + rank + medals row -->
                                 <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
                                   {_era_pill}{_rank_badge}{_medal_html}
                                 </div>
-                                <!-- Dominant stat: points -->
                                 {'<div style="color:#FFD700;font-size:1.5rem;font-weight:900;line-height:1;margin-bottom:4px;">' + f"{pts:,}" + '<span style="color:#8A8D9A;font-size:0.7rem;font-weight:400;margin-left:4px;">pts</span></div>' if pts else ""}
                               </div>
-                              <!-- Rank badge top-right -->
                               <div style="text-align:right;min-width:32px;">
                                 {'<div style="color:#5A5D6A;font-size:0.78rem;font-weight:700;">#' + str(rank_num) + '</div>' if rank_num else ""}
                               </div>
                             </div>
-                            <!-- Secondary stats row -->
-                            <div style="display:flex;gap:16px;margin-top:6px;padding-top:10px;
-                                        border-top:1px solid {_card_bdr};">
+                            <div style="display:flex;gap:16px;margin-top:6px;padding-top:10px;border-top:1px solid {_card_bdr};">
                               <div style="flex:1;display:flex;gap:16px;flex-wrap:wrap;">
                                 <div>
                                   <div style="color:#8A8D9A;font-size:0.6rem;text-transform:uppercase;letter-spacing:0.5px;">Battles</div>
@@ -1299,7 +1289,6 @@ elif page == "👤 Player Profiles":
                                   <div style="color:#4A90D9;font-weight:700;font-size:0.82rem;">{gg:,}</div>
                                 </div>
                               </div>
-                              <!-- Last season activity -->
                               <div style="display:flex;gap:14px;">
                                 {_act_gbg}{_act_qi}
                               </div>
