@@ -357,19 +357,62 @@ def hide_pid(df: pd.DataFrame) -> pd.DataFrame:
 # PAGE: OVERVIEW
 # ══════════════════════════════════════════════════════════════════════════
 if page == "🏴 Dashboard":
-    st.markdown(
-        f'<h1>{flag_icon(32)} Guild Dashboard</h1>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(f'<h1>{flag_icon(32)} Guild Dashboard</h1>', unsafe_allow_html=True)
 
     gbg_tots = gbg_totals(gbg_df)
     qi_tots  = qi_totals(qi_df)
 
-    if gbg_tots.empty and qi_tots.empty:
+    # Allow dashboard to show even with only member data
+    has_any_data = not (gbg_tots.empty and qi_tots.empty and members_df.empty)
+
+    if not has_any_data:
         st.info("👋 Welcome! Head to **📥 Data Import** to upload your first season CSV.")
     else:
-        # ── KPI row ───────────────────────────────────────────────────────
         health = get_guild_health(gbg_df, qi_df, members_df)
+
+        # ── Helper: card render ───────────────────────────────────────────
+        def _dash_card(rank, player, val_label, val, val_col, sub_label=None, sub_val=None,
+                       sub_col="#8A8D9A", bar_pct=100):
+            medal   = {0:"🥇",1:"🥈",2:"🥉"}.get(rank, f"#{rank+1}")
+            bar_col = "#FFD700" if rank==0 else "#C0C0C0" if rank==1 else "#CD7F32" if rank==2 else "#4A90D9"
+            sub_html = ""
+            if sub_label and sub_val is not None:
+                sub_html = (
+                    '<div style="text-align:right;">'
+                    '<div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">' + sub_label + '</div>'
+                    '<div style="color:' + sub_col + ';font-weight:700;font-size:0.85rem;">' + str(sub_val) + '</div>'
+                    '</div>'
+                )
+            return (
+                '<div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;'
+                'padding:12px 16px;margin-bottom:6px;">'
+                '<div style="display:flex;align-items:center;justify-content:space-between;">'
+                '<div style="display:flex;align-items:center;gap:10px;">'
+                '<span style="font-size:1.1rem;">' + medal + '</span>'
+                '<span style="color:#E8E8E8;font-weight:700;font-size:0.9rem;">' + str(player) + '</span>'
+                '</div>'
+                '<div style="display:flex;gap:16px;align-items:center;">'
+                '<div style="text-align:right;">'
+                '<div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">' + val_label + '</div>'
+                '<div style="color:' + val_col + ';font-weight:700;font-size:0.85rem;">' + str(val) + '</div>'
+                '</div>'
+                + sub_html +
+                '</div></div>'
+                '<div style="background:#0E1117;border-radius:4px;height:4px;margin-top:8px;">'
+                '<div style="background:' + bar_col + ';width:' + str(bar_pct) + '%;height:4px;border-radius:4px;"></div>'
+                '</div></div>'
+            )
+
+        def _render_cards_with_expander(rows, render_fn, label="more"):
+            """Show top 3, rest in expander."""
+            for i, row in enumerate(rows[:3]):
+                st.markdown(render_fn(i, row), unsafe_allow_html=True)
+            if len(rows) > 3:
+                with st.expander(f"Show {len(rows)-3} more"):
+                    for i, row in enumerate(rows[3:], 3):
+                        st.markdown(render_fn(i, row), unsafe_allow_html=True)
+
+        # ── KPI row ───────────────────────────────────────────────────────
         c1, c2, c3, c4, c5, c6 = st.columns(6)
         with c1:
             st.metric("Total Guild Fights", f"{int(gbg_df['Fights'].sum()):,}" if not gbg_df.empty else "—")
@@ -390,8 +433,8 @@ if page == "🏴 Dashboard":
                       delta_color="inverse")
 
         # ── Guild health strip ────────────────────────────────────────────
-        goods_latest = health.get("total_goods_latest")
-        goods_delta  = health.get("goods_delta")
+        goods_latest   = health.get("total_goods_latest")
+        goods_delta    = health.get("goods_delta")
         inactive_names = health.get("inactive_players", [])
         if goods_latest or inactive_names:
             hc1, hc2 = st.columns(2)
@@ -401,10 +444,7 @@ if page == "🏴 Dashboard":
                     st.metric("Total Guild Goods (Latest Snapshot)", f"{goods_latest:,}", delta=delta_str)
             with hc2:
                 if inactive_names:
-                    st.markdown(
-                        f'<div class="section-title">⚠️ Zero Fights — Latest GBG Season</div>',
-                        unsafe_allow_html=True,
-                    )
+                    st.markdown('<div class="section-title">⚠️ Zero Fights — Latest GBG Season</div>', unsafe_allow_html=True)
                     st.markdown(", ".join(inactive_names))
 
         st.markdown("---")
@@ -420,137 +460,250 @@ if page == "🏴 Dashboard":
                 curr_s, prev_s = gbg_seasons[-1], gbg_seasons[-2]
                 curr_fights = int(gbg_df[gbg_df["season"] == curr_s]["Fights"].sum())
                 prev_fights = int(gbg_df[gbg_df["season"] == prev_s]["Fights"].sum())
-                delta_f     = curr_fights - prev_fights
-                curr_players = gbg_df[gbg_df["season"] == curr_s]["Player_ID"].nunique()
-                prev_players = gbg_df[gbg_df["season"] == prev_s]["Player_ID"].nunique()
                 with kc1:
-                    st.metric(f"GBG Fights ({curr_s})", f"{curr_fights:,}", delta=f"{delta_f:+,}")
+                    st.metric(f"GBG Fights ({curr_s})", f"{curr_fights:,}", delta=f"{curr_fights-prev_fights:+,}")
                 with kc2:
-                    st.metric("GBG Players", curr_players, delta=curr_players - prev_players)
+                    curr_p = gbg_df[gbg_df["season"] == curr_s]["Player_ID"].nunique()
+                    prev_p = gbg_df[gbg_df["season"] == prev_s]["Player_ID"].nunique()
+                    st.metric("GBG Players", curr_p, delta=curr_p - prev_p)
             if len(qi_seasons) >= 2:
                 curr_qs, prev_qs = qi_seasons[-1], qi_seasons[-2]
                 curr_prog = int(qi_df[qi_df["season"] == curr_qs]["Progress"].sum())
                 prev_prog = int(qi_df[qi_df["season"] == prev_qs]["Progress"].sum())
-                delta_p   = curr_prog - prev_prog
                 curr_qp   = qi_df[qi_df["season"] == curr_qs]["Player_ID"].nunique()
                 prev_qp   = qi_df[qi_df["season"] == prev_qs]["Player_ID"].nunique()
                 with kc3:
-                    st.metric(f"QI Progress ({curr_qs})", f"{curr_prog:,}", delta=f"{delta_p:+,}")
+                    st.metric(f"QI Progress ({curr_qs})", f"{curr_prog:,}", delta=f"{curr_prog-prev_prog:+,}")
                 with kc4:
                     st.metric("QI Players", curr_qp, delta=curr_qp - prev_qp)
             st.markdown("---")
 
-        # ── Trend charts + season total CARDS ────────────────────────────
+        # ── GBG + QI Season Totals ────────────────────────────────────────
         col_l, col_r = st.columns(2)
+
         with col_l:
             st.markdown(f'<div class="section-title">{gbg_icon()} GBG Season Totals</div>', unsafe_allow_html=True)
             if not gbg_tots.empty:
                 st.plotly_chart(gbg_guild_trend(gbg_tots), width="stretch")
-                gbg_tot_disp = hide_pid(gbg_tots).rename(columns={
+                gbg_rows = list(hide_pid(gbg_tots).rename(columns={
                     "season":"Season","total_fights":"Fights",
-                    "total_negotiations":"Negotiations","total_contribution":"Total","player_count":"Players"
-                })
-                for _, row in gbg_tot_disp.iterrows():
-                    st.markdown(f"""
-                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
-                                padding:12px 16px;margin-bottom:6px;display:flex;align-items:center;gap:16px;">
-                      <div style="flex:1;">
-                        <div style="color:#E8E8E8;font-weight:700;font-size:0.9rem;">⚔️ {row['Season']}</div>
-                      </div>
-                      <div style="text-align:center;min-width:70px;">
-                        <div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Fights</div>
-                        <div style="color:#FFD700;font-weight:700;">{int(row['Fights']):,}</div>
-                      </div>
-                      <div style="text-align:center;min-width:70px;">
-                        <div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Negotiations</div>
-                        <div style="color:#4A90D9;font-weight:700;">{int(row['Negotiations']):,}</div>
-                      </div>
-                      <div style="text-align:center;min-width:60px;">
-                        <div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Players</div>
-                        <div style="color:#2ECC71;font-weight:700;">{int(row['Players'])}</div>
-                      </div>
-                    </div>""", unsafe_allow_html=True)
+                    "total_negotiations":"Negotiations","player_count":"Players"
+                }).itertuples(index=False, name=None))
+                # show most recent 3, rest in expander
+                def _gbg_tot_card(i, row):
+                    return (
+                        '<div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;'
+                        'padding:12px 16px;margin-bottom:6px;display:flex;align-items:center;gap:16px;">'
+                        '<div style="flex:1;"><div style="color:#E8E8E8;font-weight:700;font-size:0.9rem;">⚔️ ' + str(row[0]) + '</div></div>'
+                        '<div style="text-align:center;min-width:70px;">'
+                        '<div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Fights</div>'
+                        '<div style="color:#FFD700;font-weight:700;">' + f"{int(row[1]):,}" + '</div></div>'
+                        '<div style="text-align:center;min-width:70px;">'
+                        '<div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Negs</div>'
+                        '<div style="color:#4A90D9;font-weight:700;">' + f"{int(row[2]):,}" + '</div></div>'
+                        '<div style="text-align:center;min-width:50px;">'
+                        '<div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Players</div>'
+                        '<div style="color:#2ECC71;font-weight:700;">' + str(int(row[3])) + '</div></div>'
+                        '</div>'
+                    )
+                gbg_rows_sorted = sorted(gbg_rows, key=lambda r: r[0], reverse=True)
+                for row in gbg_rows_sorted[:3]:
+                    st.markdown(_gbg_tot_card(0, row), unsafe_allow_html=True)
+                if len(gbg_rows_sorted) > 3:
+                    with st.expander(f"Show {len(gbg_rows_sorted)-3} more seasons"):
+                        for row in gbg_rows_sorted[3:]:
+                            st.markdown(_gbg_tot_card(0, row), unsafe_allow_html=True)
 
         with col_r:
             st.markdown(f'<div class="section-title">{qi_icon()} QI Season Totals</div>', unsafe_allow_html=True)
             if not qi_tots.empty:
                 st.plotly_chart(qi_guild_trend(qi_tots), width="stretch")
-                qi_tot_disp = hide_pid(qi_tots).rename(columns={
-                    "season":"Season","total_actions":"Actions","total_progress":"Progress","player_count":"Players"
-                })
-                for _, row in qi_tot_disp.iterrows():
-                    st.markdown(f"""
-                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
-                                padding:12px 16px;margin-bottom:6px;display:flex;align-items:center;gap:16px;">
-                      <div style="flex:1;">
-                        <div style="color:#E8E8E8;font-weight:700;font-size:0.9rem;">🌀 {row['Season']}</div>
-                      </div>
-                      <div style="text-align:center;min-width:80px;">
-                        <div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Progress</div>
-                        <div style="color:#FFD700;font-weight:700;">{int(row['Progress']):,}</div>
-                      </div>
-                      <div style="text-align:center;min-width:80px;">
-                        <div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Actions</div>
-                        <div style="color:#4A90D9;font-weight:700;">{int(row['Actions']):,}</div>
-                      </div>
-                      <div style="text-align:center;min-width:60px;">
-                        <div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Players</div>
-                        <div style="color:#2ECC71;font-weight:700;">{int(row['Players'])}</div>
-                      </div>
-                    </div>""", unsafe_allow_html=True)
+                qi_rows = list(hide_pid(qi_tots).rename(columns={
+                    "season":"Season","total_progress":"Progress","player_count":"Players"
+                }).itertuples(index=False, name=None))
+                def _qi_tot_card(i, row):
+                    return (
+                        '<div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;'
+                        'padding:12px 16px;margin-bottom:6px;display:flex;align-items:center;gap:16px;">'
+                        '<div style="flex:1;"><div style="color:#E8E8E8;font-weight:700;font-size:0.9rem;">🌀 ' + str(row[0]) + '</div></div>'
+                        '<div style="text-align:center;min-width:80px;">'
+                        '<div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Progress</div>'
+                        '<div style="color:#FFD700;font-weight:700;">' + f"{int(row[1]):,}" + '</div></div>'
+                        '<div style="text-align:center;min-width:50px;">'
+                        '<div style="color:#8A8D9A;font-size:0.65rem;text-transform:uppercase;">Players</div>'
+                        '<div style="color:#2ECC71;font-weight:700;">' + str(int(row[2])) + '</div></div>'
+                        '</div>'
+                    )
+                qi_rows_sorted = sorted(qi_rows, key=lambda r: r[0], reverse=True)
+                for row in qi_rows_sorted[:3]:
+                    st.markdown(_qi_tot_card(0, row), unsafe_allow_html=True)
+                if len(qi_rows_sorted) > 3:
+                    with st.expander(f"Show {len(qi_rows_sorted)-3} more seasons"):
+                        for row in qi_rows_sorted[3:]:
+                            st.markdown(_qi_tot_card(0, row), unsafe_allow_html=True)
 
         st.markdown("---")
 
-        # ── Top contributors CARDS ────────────────────────────────────────
+        # ── Top Contributors ──────────────────────────────────────────────
         col_a, col_b = st.columns(2)
+
         with col_a:
             st.markdown(f'<div class="section-title">{gbg_icon()} Top GBG Contributors (Latest)</div>', unsafe_allow_html=True)
-            top_gbg = hide_pid(gbg_top(gbg_df, n=10))
+            top_gbg = hide_pid(gbg_top(gbg_df, n=20))
             if not top_gbg.empty:
-                medal_map = {0:"🥇",1:"🥈",2:"🥉"}
-                max_fights = top_gbg["Fights"].max() if "Fights" in top_gbg.columns else 1
-                for i, (_, row) in enumerate(top_gbg.iterrows()):
-                    medal   = medal_map.get(i, f"#{i+1}")
-                    bar_pct = int(row.get("Fights", 0) / max(max_fights, 1) * 100)
-                    bar_col = "#FFD700" if i == 0 else "#C0C0C0" if i == 1 else "#CD7F32" if i == 2 else "#4A90D9"
-                    fights  = f"{int(row.get('Fights',0)):,}"
-                    negs    = f"{int(row.get('Negotiations',0)):,}"
-                    st.markdown(f"""
-                    <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
-                                padding:12px 16px;margin-bottom:6px;">
-                      <div style="display:flex;align-items:center;justify-content:space-between;">
-                        <div style="display:flex;align-items:center;gap:10px;">
-                          <span style="font-size:1.1rem;">{medal}</span>
-                          <span style="color:#E8E8E8;font-weight:700;font-size:0.9rem;">{row['Player']}</span>
-                        </div>
-                        <div style="display:flex;gap:16px;">
-                          <div style="text-align:right;">
-                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Fights</div>
-                            <div style="color:#FFD700;font-weight:700;font-size:0.85rem;">{fights}</div>
-                          </div>
-                          <div style="text-align:right;">
-                            <div style="color:#8A8D9A;font-size:0.62rem;text-transform:uppercase;">Negs</div>
-                            <div style="color:#4A90D9;font-weight:700;font-size:0.85rem;">{negs}</div>
-                          </div>
-                        </div>
-                      </div>
-                      <div style="background:#0E1117;border-radius:4px;height:4px;margin-top:8px;">
-                        <div style="background:{bar_col};width:{bar_pct}%;height:4px;border-radius:4px;"></div>
-                      </div>
-                    </div>""", unsafe_allow_html=True)
+                max_f = top_gbg["Fights"].max() if "Fights" in top_gbg.columns else 1
+                rows_gbg = list(top_gbg.itertuples(index=False))
+                def _gbg_contrib(i, row):
+                    bar = int(getattr(row,"Fights",0) / max(max_f,1) * 100)
+                    return _dash_card(i, row.Player, "Fights", f"{int(getattr(row,'Fights',0)):,}",
+                                      "#FFD700", "Negs", f"{int(getattr(row,'Negotiations',0)):,}",
+                                      "#4A90D9", bar)
+                _render_cards_with_expander(rows_gbg, _gbg_contrib)
 
         with col_b:
             st.markdown(f'<div class="section-title">{qi_icon()} Top QI Contributors (Latest)</div>', unsafe_allow_html=True)
-            top_qi = hide_pid(qi_top(qi_df, n=10))
+            top_qi = hide_pid(qi_top(qi_df, n=20))
             if not top_qi.empty:
-                medal_map = {0:"🥇",1:"🥈",2:"🥉"}
-                max_prog = top_qi["Progress"].max() if "Progress" in top_qi.columns else 1
-                for i, (_, row) in enumerate(top_qi.iterrows()):
-                    medal   = medal_map.get(i, f"#{i+1}")
-                    bar_pct = int(row.get("Progress", 0) / max(max_prog, 1) * 100)
-                    bar_col = "#FFD700" if i == 0 else "#C0C0C0" if i == 1 else "#CD7F32" if i == 2 else "#9B59B6"
-                    prog    = f"{int(row.get('Progress',0)):,}"
-                    actions = f"{int(row.get('Actions',0)):,}"
+                max_p = top_qi["Progress"].max() if "Progress" in top_qi.columns else 1
+                rows_qi = list(top_qi.itertuples(index=False))
+                def _qi_contrib(i, row):
+                    bar = int(getattr(row,"Progress",0) / max(max_p,1) * 100)
+                    return _dash_card(i, row.Player, "Progress", f"{int(getattr(row,'Progress',0)):,}",
+                                      "#FFD700", bar_pct=bar)
+                _render_cards_with_expander(rows_qi, _qi_contrib)
+
+        st.markdown("---")
+
+        # ── Avg Fights / Avg Progress ─────────────────────────────────────
+        col_c, col_d = st.columns(2)
+
+        with col_c:
+            st.markdown(f'<div class="section-title">{gbg_icon()} Top 10 Avg Fights / Season</div>', unsafe_allow_html=True)
+            avg_gbg = get_most_consistent_players(gbg_df, qi_df, "gbg")
+            if avg_gbg:
+                max_avg = avg_gbg[0]["score"] if avg_gbg else 1
+                def _avg_gbg_card(i, row):
+                    bar = int(row["score"] / max(max_avg,1) * 100)
+                    return _dash_card(i, row["player"], "Avg Fights", f"{row['avg']:.0f}",
+                                      "#FFD700", "Seasons", str(row.get("seasons","")), "#8A8D9A", bar)
+                _render_cards_with_expander(avg_gbg, _avg_gbg_card)
+
+        with col_d:
+            st.markdown(f'<div class="section-title">{qi_icon()} Top 10 Avg Progress / Season</div>', unsafe_allow_html=True)
+            avg_qi = get_most_consistent_players(gbg_df, qi_df, "qi")
+            if avg_qi:
+                max_avg_q = avg_qi[0]["score"] if avg_qi else 1
+                def _avg_qi_card(i, row):
+                    bar = int(row["score"] / max(max_avg_q,1) * 100)
+                    return _dash_card(i, row["player"], "Avg Progress", f"{row['avg']:.0f}",
+                                      "#9B59B6", "Seasons", str(row.get("seasons","")), "#8A8D9A", bar)
+                _render_cards_with_expander(avg_qi, _avg_qi_card)
+
+        st.markdown("---")
+
+        # ── Player spotlights ─────────────────────────────────────────────
+        st.markdown('<div class="section-title">🔦 Player Spotlights</div>', unsafe_allow_html=True)
+        improved  = get_most_improved(gbg_df, qi_df)
+        streaks   = get_active_streak(gbg_df, qi_df)
+        newcomers = get_newcomers(gbg_df, qi_df)
+
+        sp1, sp2, sp3, sp4 = st.columns(4)
+
+        def _stat_card(emoji, title, name, value_html, sub=""):
+            return (
+                '<div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:12px;'
+                'padding:16px 18px;height:100%;min-height:120px;">'
+                '<div style="color:#8A8D9A;font-size:0.7rem;text-transform:uppercase;'
+                'letter-spacing:1px;margin-bottom:6px;">' + emoji + ' ' + title + '</div>'
+                '<div style="color:#E8E8E8;font-size:1rem;font-weight:700;margin-bottom:4px;">' + name + '</div>'
+                '<div style="font-size:0.9rem;">' + value_html + '</div>'
+                + ('<div style="color:#5A5D6A;font-size:0.72rem;margin-top:6px;">' + sub + '</div>' if sub else '') +
+                '</div>'
+            )
+
+        with sp1:
+            b = improved.get("best")
+            if b:
+                sign  = "+" if b["delta"] >= 0 else ""
+                vhtml = '<span style="color:#2ECC71;font-weight:700;">' + sign + f'{b["delta"]:,}' + ' fights (' + sign + f'{b["pct"]:.1f}%)</span>'
+                st.markdown(_stat_card("🚀","Most Improved", b["player"], vhtml, b["seasons"]), unsafe_allow_html=True)
+            else:
+                st.markdown(_stat_card("🚀","Most Improved","—","Need 2+ seasons",""), unsafe_allow_html=True)
+
+        with sp2:
+            w = improved.get("worst")
+            if w:
+                sign  = "+" if w["delta"] >= 0 else ""
+                col   = "#E74C3C" if w["delta"] < 0 else "#2ECC71"
+                vhtml = '<span style="color:' + col + ';font-weight:700;">' + sign + f'{w["delta"]:,}' + ' fights (' + sign + f'{w["pct"]:.1f}%)</span>'
+                st.markdown(_stat_card("⚠️","Needs Attention", w["player"], vhtml, w["seasons"]), unsafe_allow_html=True)
+            else:
+                st.markdown(_stat_card("⚠️","Needs Attention","—","Need 2+ seasons",""), unsafe_allow_html=True)
+
+        with sp3:
+            if streaks:
+                top_s = streaks[0]
+                vhtml = '<span style="color:#FFD700;font-weight:700;">' + str(top_s["streak"]) + ' consecutive seasons</span>'
+                st.markdown(_stat_card("🔥","Longest Streak", top_s["player"], vhtml,
+                                       f'{top_s["total_seasons"]} total seasons'), unsafe_allow_html=True)
+            else:
+                st.markdown(_stat_card("🔥","Longest Streak","—","No data",""), unsafe_allow_html=True)
+
+        with sp4:
+            if newcomers:
+                names_html = "".join(
+                    '<div style="color:#4A90D9;font-size:0.85rem;">• ' + n["player"] +
+                    ' <span style="color:#5A5D6A;font-size:0.75rem;">(' + ", ".join(n["sections"]) + ')</span></div>'
+                    for n in newcomers[:4]
+                )
+                extra = f'+{len(newcomers)-4} more' if len(newcomers) > 4 else ""
+                st.markdown(
+                    '<div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:12px;'
+                    'padding:16px 18px;min-height:120px;">'
+                    '<div style="color:#8A8D9A;font-size:0.7rem;text-transform:uppercase;'
+                    'letter-spacing:1px;margin-bottom:8px;">🌟 Newcomers This Season</div>'
+                    + names_html +
+                    ('<div style="color:#5A5D6A;font-size:0.72rem;margin-top:4px;">' + extra + '</div>' if extra else '') +
+                    '</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(_stat_card("🌟","Newcomers This Season","—","No newcomers",""), unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # ── Points trend + Era distribution ──────────────────────────────
+        pt1, pt2 = st.columns(2)
+        with pt1:
+            st.markdown('<div class="section-title">📈 Guild Points Trend</div>', unsafe_allow_html=True)
+            if not members_df.empty:
+                st.plotly_chart(points_trend_chart(members_df), width="stretch")
+            else:
+                st.info("No member snapshot data yet.")
+        with pt2:
+            st.markdown('<div class="section-title">🌍 Era Distribution</div>', unsafe_allow_html=True)
+            if not members_df.empty:
+                st.plotly_chart(era_distribution_chart(members_df), width="stretch")
+            else:
+                st.info("No member snapshot data yet.")
+
+        st.markdown("---")
+
+        # ── Player status ─────────────────────────────────────────────────
+        st.markdown('<div class="section-title">📋 Player Status — Latest Season</div>', unsafe_allow_html=True)
+        status_df = detect_player_status(gbg_df, qi_df)
+        if not status_df.empty:
+            for sec in status_df["section"].unique():
+                st.markdown(f"**{sec}**")
+                sec_df = status_df[status_df["section"] == sec]
+                latest_season = sec_df["season"].max()
+                latest_df = sec_df[sec_df["season"] == latest_season]
+                for status, css in [("new","pill-new"),("returning","pill-returning"),
+                                     ("missing","pill-missing"),("active","pill-active")]:
+                    names = latest_df[latest_df["status"] == status]["Player"].tolist()
+                    if names:
+                        st.markdown(
+                            f'<span class="{css}">{status.upper()}: {len(names)}</span> — {", ".join(names)}',
+                            unsafe_allow_html=True,
+                        )
                     st.markdown(f"""
                     <div style="background:#1A1D27;border:1px solid #2A2D3A;border-radius:10px;
                                 padding:12px 16px;margin-bottom:6px;">
@@ -1748,43 +1901,110 @@ elif page == "📥 Data Import":
 
     with tab_gbg_imp:
         st.subheader("Import GBG Season")
-        st.markdown("**Required columns:** `Player_ID`, `Player`, `Negotiations`, `Fights`, `Total`")
-        gbg_season_name = st.text_input("Season name", placeholder="e.g. GBG_S1", key="gbg_season_input")
+        st.markdown(
+            "Upload the CSV exported from **FoE Helper**. "
+            "The export date is read from the filename — adjust the season date range below if needed."
+        )
         gbg_file = st.file_uploader("Upload GBG CSV", type=["csv"], key="gbg_upload")
-        if gbg_file and gbg_season_name:
+        if gbg_file:
             try:
-                df_preview = pd.read_csv(gbg_file)
-                st.dataframe(df_preview.head(), width="stretch", hide_index=True)
+                import io as _io_g, re as _re_g, datetime as _dt_g
+                _raw_g = gbg_file.read().decode("utf-8-sig")
+                _sep_g = ";" if _raw_g.count(";") > _raw_g.count(",") else ","
+                df_gbg_raw = pd.read_csv(_io_g.StringIO(_raw_g), sep=_sep_g)
+
+                # Auto-detect date from filename
+                _dm_g = _re_g.search(r"(\d{4})-(\d{2})-(\d{2})", gbg_file.name)
+                if _dm_g:
+                    _end_g   = _dt_g.date(int(_dm_g.group(1)), int(_dm_g.group(2)), int(_dm_g.group(3)))
+                    _start_g = _end_g - _dt_g.timedelta(days=11)
+                else:
+                    _end_g   = _dt_g.date.today()
+                    _start_g = _end_g - _dt_g.timedelta(days=11)
+
+                # Info strip
+                cg1, cg2, cg3 = st.columns(3)
+                cg1.metric("Players detected", len(df_gbg_raw))
+                cg2.metric("Separator", "Semicolon" if _sep_g == ";" else "Comma")
+                cg3.metric("Extra columns", ", ".join(c for c in df_gbg_raw.columns
+                           if c not in ["Player_ID","Player","Negotiations","Fights","Total"]) or "None")
+
+                # Date range editor
+                st.markdown('<div class="section-title">Season date range</div>', unsafe_allow_html=True)
+                dc1, dc2 = st.columns(2)
+                with dc1:
+                    _s_start = st.date_input("Season start", value=_start_g, key="gbg_start")
+                with dc2:
+                    _s_end   = st.date_input("Season end",   value=_end_g,   key="gbg_end")
+
+                _season_name_g = _s_start.strftime("%-d %b %Y") + " - " + _s_end.strftime("%-d %b %Y")
+                st.markdown(f'Season name: **`{_season_name_g}`**')
+
+                # Preview
+                _prev_cols_g = [c for c in ["Player_ID","Player","Negotiations","Fights","Total"]
+                                if c in df_gbg_raw.columns]
+                st.dataframe(df_gbg_raw[_prev_cols_g].head(8), width="stretch", hide_index=True)
+
                 if st.button("✅ Confirm Import", key="gbg_confirm"):
-                    gbg_file.seek(0)
-                    ok, msg = import_gbg(pd.read_csv(gbg_file), gbg_season_name.strip())
+                    ok, msg = import_gbg(df_gbg_raw, _season_name_g)
                     st.success(msg) if ok else st.error(msg)
                     if ok:
                         st.rerun()
             except Exception as e:
-                st.error(f"Error: {e}")
-        elif gbg_file:
-            st.warning("Enter a season name first.")
+                st.error(f"Error reading file: {e}")
 
     with tab_qi_imp:
         st.subheader("Import QI Season")
-        st.markdown("**Required columns:** `Player_ID`, `Player`, `Actions`, `Progress`")
-        qi_season_name = st.text_input("Season name", placeholder="e.g. QI_S1", key="qi_season_input")
+        st.markdown(
+            "Upload the CSV exported from **FoE Helper**. "
+            "The export date is read from the filename — adjust the season date range below if needed."
+        )
         qi_file = st.file_uploader("Upload QI CSV", type=["csv"], key="qi_upload")
-        if qi_file and qi_season_name:
+        if qi_file:
             try:
-                df_preview = pd.read_csv(qi_file)
-                st.dataframe(df_preview.head(), width="stretch", hide_index=True)
+                import io as _io_q, re as _re_q, datetime as _dt_q
+                _raw_q = qi_file.read().decode("utf-8-sig")
+                _sep_q = ";" if _raw_q.count(";") > _raw_q.count(",") else ","
+                df_qi_raw = pd.read_csv(_io_q.StringIO(_raw_q), sep=_sep_q)
+
+                # Auto-detect date from filename
+                _dm_q = _re_q.search(r"(\d{4})-(\d{2})-(\d{2})", qi_file.name)
+                if _dm_q:
+                    _end_q   = _dt_q.date(int(_dm_q.group(1)), int(_dm_q.group(2)), int(_dm_q.group(3)))
+                    _start_q = _end_q - _dt_q.timedelta(days=11)
+                else:
+                    _end_q   = _dt_q.date.today()
+                    _start_q = _end_q - _dt_q.timedelta(days=11)
+
+                # Info strip
+                cq1, cq2, cq3 = st.columns(3)
+                cq1.metric("Players detected", len(df_qi_raw))
+                cq2.metric("Separator", "Semicolon" if _sep_q == ";" else "Comma")
+                cq3.metric("Columns", ", ".join(df_qi_raw.columns[:4].tolist()))
+
+                # Date range editor
+                st.markdown('<div class="section-title">Season date range</div>', unsafe_allow_html=True)
+                qc1, qc2 = st.columns(2)
+                with qc1:
+                    _q_start = st.date_input("Season start", value=_start_q, key="qi_start")
+                with qc2:
+                    _q_end   = st.date_input("Season end",   value=_end_q,   key="qi_end")
+
+                _season_name_q = _q_start.strftime("%-d %b %Y") + " - " + _q_end.strftime("%-d %b %Y")
+                st.markdown(f'Season name: **`{_season_name_q}`**')
+
+                # Preview
+                _prev_cols_q = [c for c in ["Player_ID","Player","Actions","Progress"]
+                                if c in df_qi_raw.columns]
+                st.dataframe(df_qi_raw[_prev_cols_q].head(8), width="stretch", hide_index=True)
+
                 if st.button("✅ Confirm Import", key="qi_confirm"):
-                    qi_file.seek(0)
-                    ok, msg = import_qi(pd.read_csv(qi_file), qi_season_name.strip())
+                    ok, msg = import_qi(df_qi_raw, _season_name_q)
                     st.success(msg) if ok else st.error(msg)
                     if ok:
                         st.rerun()
             except Exception as e:
-                st.error(f"Error: {e}")
-        elif qi_file:
-            st.warning("Enter a season name first.")
+                st.error(f"Error reading file: {e}")
 
     with tab_mem_imp:
         st.subheader("Import Guild Member Snapshot")
