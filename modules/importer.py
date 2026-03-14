@@ -133,6 +133,10 @@ def save_members_csv(df: pd.DataFrame, snapshot: str) -> tuple[bool, str]:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
     if "rank" in df.columns:
         df["rank"] = pd.to_numeric(df["rank"], errors="coerce").fillna(0).astype(int)
+    # Preserve extra FoE Helper columns if present
+    for col in ["activity_warnings", "gex_participation", "gbg_participation", "messages"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
     path = MEMBERS_DIR / _filename_from_season(snapshot)
     df.to_csv(path, index=False)
     return True, f"Saved {len(df)} member records → data/members/{path.name}"

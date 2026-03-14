@@ -1785,28 +1785,68 @@ elif page == "📥 Data Import":
     with tab_mem_imp:
         st.subheader("Import Guild Member Snapshot")
         st.markdown(
-            "**Required columns:** `member_id`, `member`, `points`, `eraName`, `guildgoods`, `won_battles`  \n"
-            "Optional: `rank`, `eraID`"
+            "Upload the CSV exported directly from **FoE Helper**. "
+            "The snapshot date is extracted automatically from the filename (e.g. `Member-2026-03-14.csv`)."
         )
-        mem_snapshot_name = st.text_input(
-            "Snapshot name", placeholder="e.g. 29 Jan - 09 Feb 2026", key="mem_snapshot_input",
-            help="Use the same date format as your GBG/QI seasons for consistent sorting"
-        )
+
         mem_file = st.file_uploader("Upload Members CSV", type=["csv"], key="mem_upload")
-        if mem_file and mem_snapshot_name:
+
+        if mem_file:
             try:
-                df_preview = pd.read_csv(mem_file)
-                st.dataframe(df_preview.head(), width="stretch", hide_index=True)
-                if st.button("✅ Confirm Import", key="mem_confirm"):
-                    mem_file.seek(0)
-                    ok, msg = import_members(pd.read_csv(mem_file), mem_snapshot_name.strip())
+                # ── Auto-detect separator (FoE Helper uses semicolons) ──
+                raw = mem_file.read().decode("utf-8-sig")
+                mem_file.seek(0)
+                sep = ";" if raw.count(";") > raw.count(",") else ","
+                import io as _io
+                df_raw = pd.read_csv(_io.StringIO(raw), sep=sep)
+
+                # ── Extract snapshot date from filename ──────────────────
+                import re as _re
+                _fname = mem_file.name  # e.g. Member-2026-03-14.csv
+                _date_match = _re.search(r"(\d{4})-(\d{2})-(\d{2})", _fname)
+                if _date_match:
+                    import datetime as _dt
+                    _y, _m, _d = int(_date_match.group(1)), int(_date_match.group(2)), int(_date_match.group(3))
+                    _snap = _dt.date(_y, _m, _d).strftime("%-d %b %Y")
+                else:
+                    _snap = None
+
+                # ── Column normalisation ─────────────────────────────────
+                _col_map = {}
+                if "member_id" in df_raw.columns: _col_map["member_id"] = "member_id"
+                if "member"    in df_raw.columns: _col_map["member"]    = "member"
+                # Keep extra FoE Helper columns if present
+                _extra_cols = ["activity_warnings", "gex_participation", "gbg_participation", "messages"]
+
+                # Show detected info
+                c_info1, c_info2, c_info3 = st.columns(3)
+                c_info1.metric("Rows detected", len(df_raw))
+                c_info2.metric("Separator", "Semicolon" if sep == ";" else "Comma")
+                c_info3.metric("Snapshot date", _snap if _snap else "Not found in filename")
+
+                if not _snap:
+                    _snap = st.text_input("Snapshot name not found in filename — enter manually",
+                                          placeholder="e.g. 14 Mar 2026", key="mem_snap_manual")
+
+                # Preview
+                _preview_cols = ["rank","member_id","member","points","eraName","guildgoods","won_battles"]
+                _preview_cols = [c for c in _preview_cols if c in df_raw.columns]
+                st.markdown('<div class="section-title">Preview</div>', unsafe_allow_html=True)
+                st.dataframe(df_raw[_preview_cols].head(8), width="stretch", hide_index=True)
+
+                # Extra columns notice
+                _found_extras = [c for c in _extra_cols if c in df_raw.columns]
+                if _found_extras:
+                    st.info(f"Extra columns detected and will be saved: {', '.join('`' + c + '`' for c in _found_extras)}")
+
+                if _snap and st.button("✅ Confirm Import", key="mem_confirm"):
+                    ok, msg = import_members(df_raw, _snap.strip())
                     st.success(msg) if ok else st.error(msg)
                     if ok:
                         st.rerun()
+
             except Exception as e:
-                st.error(f"Error: {e}")
-        elif mem_file:
-            st.warning("Enter a snapshot name first.")
+                st.error(f"Error reading file: {e}")
 
     with tab_manage:
         st.subheader("Manage Imported Seasons")
